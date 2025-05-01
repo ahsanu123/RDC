@@ -1,0 +1,31 @@
+[package]
+name = "max170xx"
+version = "1.0.0"
+authors = ["Diego Barrios Romero <eldruin@gmail.com>"]
+repository = "https://github.com/eldruin/max170xx-rs"
+license = "MIT OR Apache-2.0"
+description = "Platform-agnostic Rust driver for the MAX170xx 1-cell/2-cell fuel-gauge systems with ModelGauge for lithium-ion (Li+) batteries.\nCompatible with MAX17043, MAX17044, MAX17048 MAX17049, MAX17058 and MAX17059."
+readme = "README.md"
+keywords = ["fuel", "gauge", "lithium", "battery", "embedded-hal-driver"]
+categories = ["embedded", "hardware-support", "no-std"]
+homepage = "https://github.com/eldruin/max170xx-rs"
+documentation = "https://docs.rs/max170xx"
+include = [
+    "/**/*.rs",
+    "/Cargo.toml",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE-MIT",
+    "/LICENSE-APACHE",
+]
+edition = "2021"
+
+[dependencies]
+embedded-hal = "1.0.0"
+
+[dev-dependencies]
+linux-embedded-hal = "0.4"
+embedded-hal-mock = {version="0.10.0", default-features=false, features=['eh1']}
+
+[profile.release]
+lto = true
