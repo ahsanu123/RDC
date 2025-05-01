@@ -5,7 +5,28 @@ and portable equipment. The MAX17048 operates with
 a single lithium cell and the MAX17049 with two lithium
 cells in series
 
-## 🥖 References 
+### Note 
+
+syntax `where I2C: I2c<Error = E>` is not define Error default to `E`, but `Error` is 
+aliased as `E`.
+
+```rust
+
+impl<I2C, E> MAX17048<I2C>
+where
+    I2C: I2c<Error = E>,
+{
+    pub fn new(i2c: I2C) -> Self {
+        MAX17048 { i2c }
+    }
+
+    pub fn destroy(self) -> I2C {
+        self.i2c
+    }
+}
+```
+
+### 🥖 References 
 
 - [max170xx-eldruin](https://github.com/eldruin/max170xx-rs)
 - [embedded test](https://barretts.club/posts/embedded-tests/)
