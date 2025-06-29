@@ -9,3 +9,7 @@
 - 🛠 Designed to work in `no_std` environments
 - 📦 Easy integration with different hardware abstraction layers (HALs)
 
+
+### ✨ Reference 
+
+- [rust-syn-crate-tutorial](https://packetandpine.com/blog/rust-syn-crate-tutorial/)
