@@ -1,79 +1,34 @@
 #![no_std]
+
+mod fault_cycle;
+mod max31865_error;
+mod numwires;
+mod regiter;
+mod traits;
+
 use embedded_hal::{
     delay::DelayNs,
     spi::{Operation, SpiDevice},
 };
 
-#[derive(PartialEq, Eq)]
-enum FaultCycle {
-    None = 0,
-    Auto,
-    ManualRun,
-    ManualFinish,
-}
+use crate::{
+    fault_cycle::FaultCycle,
+    max31865_error::Max31865Error,
+    numwires::Numwires,
+    regiter::Register,
+    traits::{ReadTrait, WriteTrait},
+};
 
-#[derive(PartialEq, Eq)]
-struct Numwires;
-impl Numwires {
-    pub const MAX31865_2_WIRE: u8 = 0;
-    pub const MAX31865_3_WIRE: u8 = 1;
-    pub const MAX31865_4_WIRE: u8 = 0;
-}
-
-pub struct Register;
-impl Register {
-    pub const MAX31865_CONFIG_REG: u8 = 0x00;
-    pub const MAX31865_CONFIG_BIAS: u8 = 0x80;
-    pub const MAX31865_CONFIG_MODEAUTO: u8 = 0x40;
-    pub const MAX31865_CONFIG_MODEOFF: u8 = 0x00;
-    pub const MAX31865_CONFIG_1SHOT: u8 = 0x20;
-    pub const MAX31865_CONFIG_3WIRE: u8 = 0x10;
-    pub const MAX31865_CONFIG_24WIRE: u8 = 0x00;
-    pub const MAX31865_CONFIG_FAULTSTAT: u8 = 0x02;
-    pub const MAX31865_CONFIG_FILT50HZ: u8 = 0x01;
-    pub const MAX31865_CONFIG_FILT60HZ: u8 = 0x00;
-
-    pub const MAX31865_RTDMSB_REG: u8 = 0x01;
-    pub const MAX31865_RTDLSB_REG: u8 = 0x02;
-    pub const MAX31865_HFAULTMSB_REG: u8 = 0x03;
-    pub const MAX31865_HFAULTLSB_REG: u8 = 0x04;
-    pub const MAX31865_LFAULTMSB_REG: u8 = 0x05;
-    pub const MAX31865_LFAULTLSB_REG: u8 = 0x06;
-    pub const MAX31865_FAULTSTAT_REG: u8 = 0x07;
-
-    pub const MAX31865_FAULT_HIGHTHRESH: u8 = 0x80;
-    pub const MAX31865_FAULT_LOWTHRESH: u8 = 0x40;
-    pub const MAX31865_FAULT_REFINLOW: u8 = 0x20;
-    pub const MAX31865_FAULT_REFINHIGH: u8 = 0x10;
-    pub const MAX31865_FAULT_RTDINLOW: u8 = 0x08;
-    pub const MAX31865_FAULT_OVUV: u8 = 0x04;
-
-    pub const RTD_A: f32 = 3.9083e-3;
-    pub const RTD_B: f32 = -5.775e-7;
-}
-
-enum Max31865Error {
-    WriteError,
-    ReadError,
-}
-
-trait ReadTrait {
-    fn read_u16(&mut self, address: u8) -> u16;
-    fn read_u8(&mut self, address: u8) -> u8;
-    fn read_n<const N: usize>(&mut self, address: u8, buffer: &mut [u8; N]);
-}
-
-trait WriteTrait {
-    fn write_u8(&mut self, address: u8, data: u8) -> Result<(), Max31865Error>;
-}
-
-struct Max31865<SPI, Delay>
+// Max31865 is generic for SpiDevice and DelayNs trait
+pub struct Max31865<SPI, Delay>
 where
     SPI: SpiDevice,
     Delay: DelayNs,
 {
     spi: SPI,
     delay: Delay,
+    ref_resistor: f32,
+    rtd_nominal: f32,
 }
 
 impl<SPI, Delay> WriteTrait for Max31865<SPI, Delay>
@@ -123,8 +78,13 @@ where
     SPI: SpiDevice,
     Delay: DelayNs,
 {
-    pub fn new(spi: SPI, delay: Delay, wire: u8) -> Self {
-        let mut instance = Self { spi, delay };
+    pub fn new(spi: SPI, delay: Delay, wire: u8, rtd_nominal: f32, ref_resistor: f32) -> Self {
+        let mut instance = Self {
+            spi,
+            delay,
+            rtd_nominal,
+            ref_resistor,
+        };
 
         instance.set_wires(wire);
         instance.enable_bias(false);
@@ -146,7 +106,7 @@ where
 
     pub fn enable_bias(&mut self, enable: bool) {
         let mut value = self.read_u8(Register::MAX31865_CONFIG_REG);
-        if (enable) {
+        if enable {
             value |= Register::MAX31865_CONFIG_BIAS;
         } else {
             value |= !Register::MAX31865_CONFIG_BIAS;
@@ -162,14 +122,14 @@ where
 
             match cycle {
                 FaultCycle::Auto => {
-                    let _ = self.write_u8(Register::MAX31865_CONFIG_REG, (config_reg | 0b10000100));
+                    let _ = self.write_u8(Register::MAX31865_CONFIG_REG, config_reg | 0b10000100);
                     self.delay.delay_ms(1);
                 }
                 FaultCycle::ManualRun => {
-                    let _ = self.write_u8(Register::MAX31865_CONFIG_REG, (config_reg | 0b10001000));
+                    let _ = self.write_u8(Register::MAX31865_CONFIG_REG, config_reg | 0b10001000);
                 }
                 FaultCycle::ManualFinish => {
-                    let _ = self.write_u8(Register::MAX31865_CONFIG_REG, (config_reg | 0b10001100));
+                    let _ = self.write_u8(Register::MAX31865_CONFIG_REG, config_reg | 0b10001100);
                 }
 
                 _ => {}
@@ -241,25 +201,25 @@ where
         let _ = self.write_u8(Register::MAX31865_CONFIG_REG, value);
     }
 
-    pub fn temperature(&mut self, rtd_nominal: f32, ref_resistor: f32) -> f32 {
+    pub fn temperature(&mut self) -> f32 {
         let rtd_raw: f32 = self.read_rtd() as f32;
 
         let mut rt = rtd_raw / 32768.0;
-        rt *= ref_resistor;
+        rt *= self.ref_resistor;
 
         let z1 = -Register::RTD_A;
         let z2 = Register::RTD_A * Register::RTD_A - (4.0 * Register::RTD_B);
-        let z3 = (4.0 * Register::RTD_B) / rtd_nominal;
+        let z3 = (4.0 * Register::RTD_B) / self.rtd_nominal;
         let z4 = 2.0 * Register::RTD_B;
 
         let mut temp = z2 + (z3 * rt);
-        temp = (libm::sqrt(temp) + z1) / z4;
+        temp = (libm::sqrtf(temp) + z1) / z4;
 
         if temp >= 0.0 {
             return temp;
         }
 
-        rt /= rtd_nominal;
+        rt /= self.rtd_nominal;
         rt *= 100.0;
 
         let mut rpoly = rt;
@@ -277,6 +237,16 @@ where
 
         temp
     }
-}
 
-pub fn explore_spi() {}
+    pub fn get_resistance(&mut self) -> f32 {
+        let rtd = self.read_rtd() as f32;
+        let ratio = rtd * 32768.0;
+
+        self.ref_resistor * ratio
+    }
+
+    pub fn get_ratio(&mut self) -> f32 {
+        let rtd = self.read_rtd() as f32;
+        rtd * 32768.0
+    }
+}
