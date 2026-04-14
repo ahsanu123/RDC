@@ -40,8 +40,8 @@ where
     SPI: SpiDevice,
     Delay: DelayNs,
 {
-    fn write_u8(&mut self, address: u8, data: u8) -> Result<(), Max31865Error> {
-        let address = address | 0x80;
+    fn write_u8(&mut self, address: Register, data: u8) -> Result<(), Max31865Error> {
+        let address = address.bits() | 0x80;
         self.spi
             .write(&[address, data])
             .map_err(|_e| Max31865Error::WriteError)
@@ -53,27 +53,26 @@ where
     SPI: SpiDevice,
     Delay: DelayNs,
 {
-    fn read_u16(&mut self, address: u8) -> u16 {
+    fn read_u16(&mut self, address: Register) -> u16 {
         let mut buffer: [u8; 2] = [0; 2];
         self.read_n::<2>(address, &mut buffer);
 
         u16::from_be_bytes(buffer)
     }
 
-    fn read_u8(&mut self, address: u8) -> u8 {
+    fn read_u8(&mut self, address: Register) -> u8 {
         let mut buffer: [u8; 1] = [0; 1];
         self.read_n::<1>(address, &mut buffer);
 
         buffer[0]
     }
 
-    fn read_n<const N: usize>(&mut self, address: u8, buffer: &mut [u8; N]) {
-        let address = address & 0x7F;
+    fn read_n<const N: usize>(&mut self, address: Register, buffer: &mut [u8; N]) {
+        let address = address.bits() & 0x7F;
 
         self.spi
             .transaction(&mut [Operation::Write(&[address]), Operation::Read(buffer)])
             .map_err(|_e| Max31865Error::WriteError)
-            .map_err(|_| "")
             .expect("fail to read_n");
     }
 }
@@ -83,7 +82,13 @@ where
     SPI: SpiDevice,
     Delay: DelayNs,
 {
-    pub fn new(spi: SPI, delay: Delay, wire: u8, rtd_nominal: f32, ref_resistor: f32) -> Self {
+    pub fn new(
+        spi: SPI,
+        delay: Delay,
+        wire: Numwires,
+        rtd_nominal: f32,
+        ref_resistor: f32,
+    ) -> Self {
         let mut instance = Self {
             spi,
             delay,
@@ -102,78 +107,71 @@ where
     }
 
     pub fn clear_fault(&mut self) {
-        let mut value = self.read_u8(Register::MAX31865_CONFIG_REG);
+        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
 
-        value &= !0x2C;
-        value |= Register::MAX31865_CONFIG_FAULTSTAT;
+        value.remove(Register::CONFIG_1SHOT | Register::CONFIG_FAULT_DETECTION_CYCLE_CONTROL);
+        value |= Register::CONFIG_FAULTSTAT;
 
-        self.write_u8(Register::MAX31865_CONFIG_REG, value)
-            .map_err(|_| "")
+        self.write_u8(Register::CONFIG_REG, value.bits())
             .expect("fail to clear_fault");
     }
 
     pub fn enable_bias(&mut self, enable: bool) {
-        let mut value = self.read_u8(Register::MAX31865_CONFIG_REG);
+        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
         if enable {
-            value |= Register::MAX31865_CONFIG_BIAS;
+            value.insert(Register::CONFIG_BIAS);
         } else {
-            value |= !Register::MAX31865_CONFIG_BIAS;
+            value.remove(Register::CONFIG_BIAS);
         }
 
-        self.write_u8(Register::MAX31865_CONFIG_REG, value)
-            .map_err(|_| "")
+        self.write_u8(Register::CONFIG_REG, value.into())
             .expect("fail to enable_bias");
     }
 
     pub fn read_fault(&mut self, cycle: FaultCycle) -> u8 {
         if cycle != FaultCycle::None {
-            let mut config_reg = self.read_u8(Register::MAX31865_CONFIG_REG);
+            let mut config_reg = self.read_u8(Register::CONFIG_REG);
             config_reg &= 0x11;
 
             match cycle {
                 FaultCycle::Auto => {
-                    self.write_u8(Register::MAX31865_CONFIG_REG, config_reg | 0b10000100)
-                        .map_err(|_| "")
+                    self.write_u8(Register::CONFIG_REG, config_reg | 0b10000100)
                         .expect("fail to fault_cycle auto");
                     self.delay.delay_ms(1);
                 }
                 FaultCycle::ManualRun => {
-                    self.write_u8(Register::MAX31865_CONFIG_REG, config_reg | 0b10001000)
-                        .map_err(|_| "")
+                    self.write_u8(Register::CONFIG_REG, config_reg | 0b10001000)
                         .expect("fail to fault_cycle ManualRun");
                 }
                 FaultCycle::ManualFinish => {
-                    self.write_u8(Register::MAX31865_CONFIG_REG, config_reg | 0b10001100)
-                        .map_err(|_| "")
+                    self.write_u8(Register::CONFIG_REG, config_reg | 0b10001100)
                         .expect("fail to fault_cycle ManualFinish");
                 }
 
                 _ => {}
             }
         }
-        self.read_u8(Register::MAX31865_FAULTSTAT_REG)
+        self.read_u8(Register::FAULTSTAT_REG)
     }
     pub fn auto_convert(&mut self, enable: bool) {
-        let mut value = self.read_u8(Register::MAX31865_CONFIG_REG);
+        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
         if enable {
-            value |= Register::MAX31865_CONFIG_MODEAUTO;
+            value.insert(Register::CONFIG_MODEAUTO);
         } else {
-            value &= !Register::MAX31865_CONFIG_MODEAUTO;
+            value.remove(Register::CONFIG_MODEAUTO);
         }
-        self.write_u8(Register::MAX31865_CONFIG_REG, value)
-            .map_err(|_| "")
+        self.write_u8(Register::CONFIG_REG, value.into())
             .expect("fail to auto_convert");
     }
 
     pub fn enable_50hz(&mut self, enable: bool) {
-        let mut value = self.read_u8(Register::MAX31865_CONFIG_REG);
+        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
         if enable {
-            value |= Register::MAX31865_CONFIG_FILT50HZ;
+            value.insert(Register::CONFIG_FILT50HZ);
         } else {
-            value &= !Register::MAX31865_CONFIG_FILT50HZ;
+            value.remove(Register::CONFIG_FILT50HZ);
         }
-        self.write_u8(Register::MAX31865_CONFIG_REG, value)
-            .map_err(|_| "")
+        self.write_u8(Register::CONFIG_REG, value.into())
             .expect("fail to enable_50hz");
     }
     pub fn read_rtd(&mut self) -> u16 {
@@ -181,16 +179,15 @@ where
         self.enable_bias(true);
         self.delay.delay_ms(10);
 
-        let mut value = self.read_u8(Register::MAX31865_CONFIG_REG);
-        value |= Register::MAX31865_CONFIG_1SHOT;
+        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
+        value.insert(Register::CONFIG_1SHOT);
 
-        self.write_u8(Register::MAX31865_CONFIG_REG, value)
-            .map_err(|_| "")
+        self.write_u8(Register::CONFIG_REG, value.into())
             .expect("fail to read_rtd");
 
         self.delay.delay_ms(65);
 
-        let mut rtd = self.read_u16(Register::MAX31865_RTDMSB_REG);
+        let mut rtd = self.read_u16(Register::RTDMSB_REG);
 
         self.enable_bias(false);
         // shited 1 to right, because first bit
@@ -201,39 +198,35 @@ where
     }
 
     pub fn set_threshold(&mut self, lower: u16, upper: u16) {
-        self.write_u8(Register::MAX31865_LFAULTLSB_REG, (lower & 0xFF) as u8)
-            .map_err(|_| "")
-            .expect("fail to set lsb threshold reg");
-        self.write_u8(Register::MAX31865_LFAULTMSB_REG, (lower >> 8) as u8)
-            .map_err(|_| "")
+        self.write_u8(Register::LFAULTLSB_REG, (lower & 0xFF) as u8)
             .expect("fail to set lsb threshold reg");
 
-        self.write_u8(Register::MAX31865_HFAULTLSB_REG, (upper & 0xFF) as u8)
-            .map_err(|_| "")
+        self.write_u8(Register::LFAULTMSB_REG, (lower >> 8) as u8)
+            .expect("fail to set lsb threshold reg");
+
+        self.write_u8(Register::HFAULTLSB_REG, (upper & 0xFF) as u8)
             .expect("fail to set msb threshold reg");
-        self.write_u8(Register::MAX31865_HFAULTMSB_REG, (upper >> 8) as u8)
-            .map_err(|_| "")
+
+        self.write_u8(Register::HFAULTMSB_REG, (upper >> 8) as u8)
             .expect("fail to set msb threshold reg");
     }
 
     pub fn get_lower_threshold(&mut self) -> u16 {
-        self.read_u16(Register::MAX31865_LFAULTMSB_REG)
+        self.read_u16(Register::LFAULTMSB_REG)
     }
 
     pub fn get_upper_threshold(&mut self) -> u16 {
-        self.read_u16(Register::MAX31865_HFAULTMSB_REG)
+        self.read_u16(Register::HFAULTMSB_REG)
     }
 
-    /// wire: Numwires
-    pub fn set_wires(&mut self, wire: u8) {
-        let mut value = self.read_u8(Register::MAX31865_CONFIG_REG);
-        if wire == Numwires::MAX31865_3_WIRE {
-            value |= Register::MAX31865_CONFIG_3WIRE;
+    pub fn set_wires(&mut self, num_wire: Numwires) {
+        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
+        if num_wire == Numwires::MAX31865_3_WIRE {
+            value.insert(Register::CONFIG_3WIRE);
         } else {
-            value &= !Register::MAX31865_CONFIG_3WIRE;
+            value.remove(Register::CONFIG_3WIRE);
         }
-        self.write_u8(Register::MAX31865_CONFIG_REG, value)
-            .map_err(|_| "")
+        self.write_u8(Register::CONFIG_REG, value.into())
             .expect("fail to set_wires");
     }
 

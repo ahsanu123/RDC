@@ -1,31 +1,50 @@
-pub struct Register;
+use bitflags::bitflags;
+
+bitflags! {
+    pub struct Register: u8 {
+        const CONFIG_REG= 0x00;
+
+        const CONFIG_FAULT_DETECTION_CYCLE_CONTROL= 0x0C;
+        const CONFIG_BIAS= 0x80;
+        const CONFIG_MODEAUTO = 0x40;
+        const CONFIG_MODEOFF= 0x00;
+        const CONFIG_1SHOT= 0x20;
+        const CONFIG_3WIRE= 0x10;
+        const CONFIG_24WIRE= 0x00;
+        const CONFIG_FAULTSTAT= 0x02;
+        const CONFIG_FILT50HZ= 0x01;
+        const CONFIG_FILT60HZ= 0x00;
+
+        const RTDMSB_REG= 0x01;
+        const RTDLSB_REG= 0x02;
+        const HFAULTMSB_REG= 0x03;
+        const HFAULTLSB_REG= 0x04;
+        const LFAULTMSB_REG= 0x05;
+        const LFAULTLSB_REG= 0x06;
+        const FAULTSTAT_REG= 0x07;
+
+        const FAULT_HIGHTHRESH= 0x80;
+        const FAULT_LOWTHRESH= 0x40;
+        const FAULT_REFINLOW= 0x20;
+        const FAULT_REFINHIGH= 0x10;
+        const FAULT_RTDINLOW= 0x08;
+        const FAULT_OVUV= 0x04;
+    }
+}
+
+impl From<Register> for u8 {
+    fn from(value: Register) -> Self {
+        value.bits()
+    }
+}
+
+impl From<u8> for Register {
+    fn from(value: u8) -> Self {
+        Register::from_bits_retain(value)
+    }
+}
+
 impl Register {
-    pub const MAX31865_CONFIG_REG: u8 = 0x00;
-    pub const MAX31865_CONFIG_BIAS: u8 = 0x80;
-    pub const MAX31865_CONFIG_MODEAUTO: u8 = 0x40;
-    pub const MAX31865_CONFIG_MODEOFF: u8 = 0x00;
-    pub const MAX31865_CONFIG_1SHOT: u8 = 0x20;
-    pub const MAX31865_CONFIG_3WIRE: u8 = 0x10;
-    pub const MAX31865_CONFIG_24WIRE: u8 = 0x00;
-    pub const MAX31865_CONFIG_FAULTSTAT: u8 = 0x02;
-    pub const MAX31865_CONFIG_FILT50HZ: u8 = 0x01;
-    pub const MAX31865_CONFIG_FILT60HZ: u8 = 0x00;
-
-    pub const MAX31865_RTDMSB_REG: u8 = 0x01;
-    pub const MAX31865_RTDLSB_REG: u8 = 0x02;
-    pub const MAX31865_HFAULTMSB_REG: u8 = 0x03;
-    pub const MAX31865_HFAULTLSB_REG: u8 = 0x04;
-    pub const MAX31865_LFAULTMSB_REG: u8 = 0x05;
-    pub const MAX31865_LFAULTLSB_REG: u8 = 0x06;
-    pub const MAX31865_FAULTSTAT_REG: u8 = 0x07;
-
-    pub const MAX31865_FAULT_HIGHTHRESH: u8 = 0x80;
-    pub const MAX31865_FAULT_LOWTHRESH: u8 = 0x40;
-    pub const MAX31865_FAULT_REFINLOW: u8 = 0x20;
-    pub const MAX31865_FAULT_REFINHIGH: u8 = 0x10;
-    pub const MAX31865_FAULT_RTDINLOW: u8 = 0x08;
-    pub const MAX31865_FAULT_OVUV: u8 = 0x04;
-
     pub const RTD_A: f32 = 3.9083e-3;
     pub const RTD_B: f32 = -5.775e-7;
 }
