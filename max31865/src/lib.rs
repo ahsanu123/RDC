@@ -1,9 +1,10 @@
 #![no_std]
 
+mod error;
 mod fault_cycle;
-mod max31865_error;
 mod numwires;
 mod regiter;
+mod to_debug;
 mod traits;
 
 use embedded_hal::{
@@ -11,7 +12,9 @@ use embedded_hal::{
     spi::{Operation, SpiDevice},
 };
 
-use crate::{fault_cycle::FaultCycle, max31865_error::Max31865Error};
+use error::{Max31865Err, SpiErr};
+use fault_cycle::FaultCycle;
+use to_debug::ToDebugTrait;
 
 pub use numwires::Numwires;
 pub use regiter::Register;
@@ -40,11 +43,11 @@ where
     SPI: SpiDevice,
     Delay: DelayNs,
 {
-    fn write_u8(&mut self, address: Register, data: u8) -> Result<(), Max31865Error> {
+    fn write_u8(&mut self, address: Register, data: u8) -> Result<(), Max31865Err> {
         let address = address.bits() | 0x80;
         self.spi
             .write(&[address, data])
-            .map_err(|_e| Max31865Error::WriteError)
+            .map_err(|_| Max31865Err::Spi(SpiErr::FailToWrite))
     }
 }
 
@@ -53,27 +56,30 @@ where
     SPI: SpiDevice,
     Delay: DelayNs,
 {
-    fn read_u16(&mut self, address: Register) -> u16 {
+    fn read_u16(&mut self, address: Register) -> Result<u16, Max31865Err> {
         let mut buffer: [u8; 2] = [0; 2];
-        self.read_n::<2>(address, &mut buffer);
+        self.read_n::<2>(address, &mut buffer)?;
 
-        u16::from_be_bytes(buffer)
+        Ok(u16::from_be_bytes(buffer))
     }
 
-    fn read_u8(&mut self, address: Register) -> u8 {
+    fn read_u8(&mut self, address: Register) -> Result<u8, Max31865Err> {
         let mut buffer: [u8; 1] = [0; 1];
-        self.read_n::<1>(address, &mut buffer);
+        self.read_n::<1>(address, &mut buffer)?;
 
-        buffer[0]
+        Ok(buffer[0])
     }
 
-    fn read_n<const N: usize>(&mut self, address: Register, buffer: &mut [u8; N]) {
+    fn read_n<const N: usize>(
+        &mut self,
+        address: Register,
+        buffer: &mut [u8; N],
+    ) -> Result<(), Max31865Err> {
         let address = address.bits() & 0x7F;
 
         self.spi
             .transaction(&mut [Operation::Write(&[address]), Operation::Read(buffer)])
-            .map_err(|_e| Max31865Error::WriteError)
-            .expect("fail to read_n");
+            .map_err(|_| Max31865Err::Spi(SpiErr::FailToRead))
     }
 }
 
@@ -96,28 +102,30 @@ where
             ref_resistor,
         };
 
-        instance.set_wires(wire);
-        instance.enable_bias(true);
+        instance.set_wires(wire).to_debug();
+        instance.enable_bias(true).to_debug();
         instance.delay.delay_ms(20);
-        instance.auto_convert(true);
-        instance.set_threshold(0, 0xFFFF);
-        instance.clear_fault();
+        instance.auto_convert(true).to_debug();
+        instance.set_threshold(0, 0xFFFF).to_debug();
+        instance.clear_fault().to_debug();
 
         instance
     }
 
-    pub fn clear_fault(&mut self) {
-        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
+    pub fn clear_fault(&mut self) -> Result<(), Max31865Err> {
+        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
 
         value.remove(Register::CONFIG_1SHOT | Register::CONFIG_FAULT_DETECTION_CYCLE_CONTROL);
         value |= Register::CONFIG_FAULTSTAT;
 
         self.write_u8(Register::CONFIG_REG, value.bits())
             .expect("fail to clear_fault");
+
+        Ok(())
     }
 
-    pub fn enable_bias(&mut self, enable: bool) {
-        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
+    pub fn enable_bias(&mut self, enable: bool) -> Result<(), Max31865Err> {
+        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
         if enable {
             value.insert(Register::CONFIG_BIAS);
         } else {
@@ -126,11 +134,13 @@ where
 
         self.write_u8(Register::CONFIG_REG, value.into())
             .expect("fail to enable_bias");
+
+        Ok(())
     }
 
-    pub fn read_fault(&mut self, cycle: FaultCycle) -> u8 {
+    pub fn read_fault(&mut self, cycle: FaultCycle) -> Result<u8, Max31865Err> {
         if cycle != FaultCycle::None {
-            let mut config_reg = self.read_u8(Register::CONFIG_REG);
+            let mut config_reg = self.read_u8(Register::CONFIG_REG)?;
             config_reg &= 0x11;
 
             match cycle {
@@ -153,8 +163,8 @@ where
         }
         self.read_u8(Register::FAULTSTAT_REG)
     }
-    pub fn auto_convert(&mut self, enable: bool) {
-        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
+    pub fn auto_convert(&mut self, enable: bool) -> Result<(), Max31865Err> {
+        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
         if enable {
             value.insert(Register::CONFIG_MODEAUTO);
         } else {
@@ -162,10 +172,12 @@ where
         }
         self.write_u8(Register::CONFIG_REG, value.into())
             .expect("fail to auto_convert");
+
+        Ok(())
     }
 
-    pub fn enable_50hz(&mut self, enable: bool) {
-        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
+    pub fn enable_50hz(&mut self, enable: bool) -> Result<(), Max31865Err> {
+        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
         if enable {
             value.insert(Register::CONFIG_FILT50HZ);
         } else {
@@ -173,13 +185,15 @@ where
         }
         self.write_u8(Register::CONFIG_REG, value.into())
             .expect("fail to enable_50hz");
+
+        Ok(())
     }
-    pub fn read_rtd(&mut self) -> u16 {
-        self.clear_fault();
-        self.enable_bias(true);
+    pub fn read_rtd(&mut self) -> Result<u16, Max31865Err> {
+        self.clear_fault()?;
+        self.enable_bias(true)?;
         self.delay.delay_ms(10);
 
-        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
+        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
         value.insert(Register::CONFIG_1SHOT);
 
         self.write_u8(Register::CONFIG_REG, value.into())
@@ -187,17 +201,17 @@ where
 
         self.delay.delay_ms(65);
 
-        let mut rtd = self.read_u16(Register::RTDMSB_REG);
+        let mut rtd = self.read_u16(Register::RTDMSB_REG)?;
 
-        self.enable_bias(false);
+        self.enable_bias(false)?;
         // shited 1 to right, because first bit
         // is fault bit and not used in rtd result value
         rtd >>= 1;
 
-        rtd
+        Ok(rtd)
     }
 
-    pub fn set_threshold(&mut self, lower: u16, upper: u16) {
+    pub fn set_threshold(&mut self, lower: u16, upper: u16) -> Result<(), Max31865Err> {
         self.write_u8(Register::LFAULTLSB_REG, (lower & 0xFF) as u8)
             .expect("fail to set lsb threshold reg");
 
@@ -209,18 +223,19 @@ where
 
         self.write_u8(Register::HFAULTMSB_REG, (upper >> 8) as u8)
             .expect("fail to set msb threshold reg");
+        Ok(())
     }
 
-    pub fn get_lower_threshold(&mut self) -> u16 {
+    pub fn get_lower_threshold(&mut self) -> Result<u16, Max31865Err> {
         self.read_u16(Register::LFAULTMSB_REG)
     }
 
-    pub fn get_upper_threshold(&mut self) -> u16 {
+    pub fn get_upper_threshold(&mut self) -> Result<u16, Max31865Err> {
         self.read_u16(Register::HFAULTMSB_REG)
     }
 
-    pub fn set_wires(&mut self, num_wire: Numwires) {
-        let mut value: Register = self.read_u8(Register::CONFIG_REG).into();
+    pub fn set_wires(&mut self, num_wire: Numwires) -> Result<(), Max31865Err> {
+        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
         if num_wire == Numwires::MAX31865_3_WIRE {
             value.insert(Register::CONFIG_3WIRE);
         } else {
@@ -228,10 +243,12 @@ where
         }
         self.write_u8(Register::CONFIG_REG, value.into())
             .expect("fail to set_wires");
+
+        Ok(())
     }
 
-    pub fn temperature(&mut self) -> f32 {
-        let rtd_raw: f32 = self.read_rtd() as f32;
+    pub fn temperature(&mut self) -> Result<f32, Max31865Err> {
+        let rtd_raw: f32 = self.read_rtd()? as f32;
 
         let mut rt = rtd_raw / 32768.0;
         rt *= self.ref_resistor;
@@ -245,7 +262,7 @@ where
         temp = (libm::sqrtf(temp) + z1) / z4;
 
         if temp >= 0.0 {
-            return temp;
+            return Ok(temp);
         }
 
         rt /= self.rtd_nominal;
@@ -264,18 +281,18 @@ where
         rpoly *= rt; // ^5
         temp += 1.5243e-10 * rpoly;
 
-        temp
+        Ok(temp)
     }
 
-    pub fn get_resistance(&mut self) -> f32 {
-        let rtd = self.read_rtd() as f32;
+    pub fn get_resistance(&mut self) -> Result<f32, Max31865Err> {
+        let rtd = self.read_rtd()? as f32;
         let ratio = rtd * 32768.0;
 
-        self.ref_resistor * ratio
+        Ok(self.ref_resistor * ratio)
     }
 
-    pub fn get_debug_value(&mut self) -> DebugValue {
-        let rtd_raw = self.read_rtd() as f32;
+    pub fn get_debug_value(&mut self) -> Result<DebugValue, Max31865Err> {
+        let rtd_raw = self.read_rtd()? as f32;
         let ratio = rtd_raw * 32768.0;
 
         let resistance = self.ref_resistor * ratio;
@@ -292,11 +309,11 @@ where
         temperature = (libm::sqrtf(temperature) + z1) / z4;
 
         if temperature >= 0.0 {
-            return DebugValue {
+            return Ok(DebugValue {
                 temperature,
                 resistance,
                 ratio,
-            };
+            });
         }
 
         rt /= self.rtd_nominal;
@@ -315,15 +332,15 @@ where
         rpoly *= rt; // ^5
         temperature += 1.5243e-10 * rpoly;
 
-        DebugValue {
+        Ok(DebugValue {
             temperature,
             resistance,
             ratio,
-        }
+        })
     }
 
-    pub fn get_ratio(&mut self) -> f32 {
-        let rtd = self.read_rtd() as f32;
-        rtd * 32768.0
+    pub fn get_ratio(&mut self) -> Result<f32, Max31865Err> {
+        let rtd = self.read_rtd()? as f32;
+        Ok(rtd * 32768.0)
     }
 }
