@@ -3,7 +3,7 @@
 mod error;
 mod fault_cycle;
 mod numwires;
-mod regiter;
+mod register;
 mod to_debug;
 mod traits;
 
@@ -17,7 +17,7 @@ use fault_cycle::FaultCycle;
 use to_debug::ToDebugTrait;
 
 pub use numwires::Numwires;
-pub use regiter::Register;
+pub use register::Register;
 pub use traits::{ReadTrait, WriteTrait};
 
 pub struct DebugValue {
