@@ -12,7 +12,7 @@ bitflags! {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HardwareErr {
     OverOrUnderVoltage,
     RtdinForceMinusOpen,
@@ -22,13 +22,13 @@ pub enum HardwareErr {
     RtdHighThreshold,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum SpiErr {
     FailToRead,
     FailToWrite,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Max31865Err {
     Spi(SpiErr),
     Hardware(HardwareErr),

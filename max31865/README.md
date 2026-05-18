@@ -10,6 +10,8 @@ protected against overvoltage faults as large as Q45V.
 Programmable detection of RTD and cable open and
 short conditions is included.
 
+The MAX31865 supports SPI modes 1 and 3. Four
+pins are used for SPI-compatible communications.
 
 ## References 
 

@@ -1,6 +1,7 @@
 #![no_std]
 
-mod error;
+pub mod error;
+
 mod fault_cycle;
 mod numwires;
 mod register;
@@ -19,6 +20,8 @@ use to_debug::ToDebugTrait;
 pub use numwires::Numwires;
 pub use register::Register;
 pub use traits::{ReadTrait, WriteTrait};
+
+use crate::error::HardwareErr;
 
 pub struct DebugValue {
     pub temperature: f32,
@@ -138,7 +141,7 @@ where
         Ok(())
     }
 
-    pub fn read_fault(&mut self, cycle: FaultCycle) -> Result<u8, Max31865Err> {
+    pub fn read_fault(&mut self, cycle: FaultCycle) -> Result<(), Max31865Err> {
         if cycle != FaultCycle::None {
             let mut config_reg = self.read_u8(Register::CONFIG_REG)?;
             config_reg &= 0x11;
@@ -161,7 +164,17 @@ where
                 _ => {}
             }
         }
-        self.read_u8(Register::FAULTSTAT_REG)
+        match self.read_u8(Register::FAULTSTAT_REG)? {
+            0b00000100 => Err(Max31865Err::Hardware(HardwareErr::OverOrUnderVoltage)),
+            0b00001000 => Err(Max31865Err::Hardware(HardwareErr::RtdinForceMinusOpen)),
+            0b00010000 => Err(Max31865Err::Hardware(HardwareErr::RefinForceMinusOpen)),
+            0b00100000 => Err(Max31865Err::Hardware(
+                HardwareErr::RefinGreatherThanPoint85TimeVBias,
+            )),
+            0b01000000 => Err(Max31865Err::Hardware(HardwareErr::RtdLowThreshold)),
+            0b10000000 => Err(Max31865Err::Hardware(HardwareErr::RtdHighThreshold)),
+            _ => Ok(()),
+        }
     }
     pub fn auto_convert(&mut self, enable: bool) -> Result<(), Max31865Err> {
         let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
@@ -204,6 +217,15 @@ where
         let mut rtd = self.read_u16(Register::RTDMSB_REG)?;
 
         self.enable_bias(false)?;
+
+        let is_fault = rtd & 0x01;
+        if is_fault == 0x01 {
+            let fault = self.read_fault(FaultCycle::ManualRun);
+            match fault {
+                Ok(_) => {}
+                Err(err) => return Err(err),
+            }
+        }
         // shited 1 to right, because first bit
         // is fault bit and not used in rtd result value
         rtd >>= 1;
