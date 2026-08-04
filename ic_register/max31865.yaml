@@ -1,0 +1,193 @@
+version: 1
+
+device:
+  name: MAX31865
+  vendor: Analog Devices
+  family: RTD
+  description: RTD-to-Digital Converter
+
+bus:
+  type: spi
+  mode: 1
+  bits_per_word: 8
+
+  read:
+    address:
+      operation: and
+      value: 0x7F
+
+  write:
+    address:
+      operation: or
+      value: 0x80
+
+register_width: 8
+endianness: big
+
+registers:
+  ####################################################################
+  # Configuration Register
+  ####################################################################
+
+  - name: CONFIG
+    address: 0x00
+    access: rw
+    reset: 0x00
+    description: Configuration Register
+
+    fields:
+      - name: bias
+        bits: 7
+        description: Bias voltage enable
+
+      - name: auto
+        bits: 6
+        description: Automatic conversion mode
+
+        enum:
+          OFF: 0
+          ON: 1
+
+      - name: one_shot
+        bits: 5
+        description: One-shot conversion
+
+      - name: three_wire
+        bits: 4
+        description: Enable 3-wire RTD compensation
+
+      - name: fault_cycle
+        bits: 3..2
+        description: Fault detection cycle
+
+        enum:
+          NONE: 0
+          AUTO: 1
+          MANUAL_RUN: 2
+          MANUAL_FINISH: 3
+
+      - name: fault_clear
+        bits: 1
+        description: Clear fault status
+
+      - name: filter
+
+        bits: 0
+
+        enum:
+          HZ60: 0
+          HZ50: 1
+
+  ####################################################################
+  # RTD Register (16-bit)
+  ####################################################################
+
+  - name: RTD
+    address: 0x01
+    width: 16
+    access: ro
+    endian: big
+
+    fields:
+      - name: value
+        bits: 15..1
+        description: 15-bit RTD ADC value
+
+      - name: fault
+        bits: 0
+        description: Fault indicator
+
+  ####################################################################
+  # High Threshold
+  ####################################################################
+
+  - name: HIGH_THRESHOLD
+    address: 0x03
+    width: 16
+    access: rw
+    endian: big
+
+    fields:
+      - name: value
+        bits: 15..1
+
+      - name: reserved
+        bits: 0
+
+  ####################################################################
+  # Low Threshold
+  ####################################################################
+
+  - name: LOW_THRESHOLD
+    address: 0x05
+    width: 16
+    access: rw
+    endian: big
+
+    fields:
+      - name: value
+        bits: 15..1
+
+      - name: reserved
+        bits: 0
+
+  ####################################################################
+  # Fault Status
+  ####################################################################
+
+  - name: FAULT_STATUS
+    address: 0x07
+    access: ro
+
+    fields:
+      - name: high_threshold
+        bits: 7
+        description: RTD above high threshold
+
+      - name: low_threshold
+        bits: 6
+        description: RTD below low threshold
+
+      - name: refin_gt_85pct
+        bits: 5
+        description: REFIN- > 0.85 × VBIAS
+
+      - name: refin_open
+        bits: 4
+        description: REFIN- open
+
+      - name: rtdin_open
+        bits: 3
+        description: RTDIN- open
+
+      - name: over_under_voltage
+        bits: 2
+        description: Overvoltage or undervoltage detected
+
+      - name: reserved
+        bits: 1..0
+
+######################################################################
+# Optional constants
+######################################################################
+
+constants:
+  RTD_A: 3.9083e-3
+  RTD_B: -5.775e-7
+
+######################################################################
+# Driver metadata
+######################################################################
+
+driver:
+  defaults:
+    filter: HZ60
+    auto: OFF
+    bias: OFF
+
+  timing:
+    bias_settle_ms: 10
+
+    one_shot_conversion_ms: 65
+
+    auto_conversion_ms: 20
