@@ -1,0 +1,2 @@
+test_crc8:
+  cargo test test_crc8

@@ -1,12 +1,12 @@
-use embedded_hal::spi::Operation;
-
 use crate::{
     TLE5012B,
     communication::{
         command::{Command, CommandWithWordData},
         possible_address::PossibleAddress,
     },
+    crc_table::does_crc_match,
 };
+use embedded_hal::spi::Operation;
 
 #[allow(unused_macros)]
 macro_rules! logi {
@@ -59,6 +59,16 @@ where
 
         let buffer = u32::from_be_bytes(buffer);
 
+        // TODO: add and test this after real hardware made
+        // let crc = does_crc_match::<4>(&raw_command, buffer);
+        // if !crc.is_value_match {
+        //     loge!(
+        //         "crc not match, expected {}, got {}",
+        //         crc.expected_value,
+        //         crc.real_value
+        //     );
+        // }
+
         logi!("read result{}", buffer);
         Ok(buffer)
     }
@@ -81,6 +91,17 @@ where
         // for data and safety word
         self.spi.transaction(&mut [Operation::Read(&mut buffer)])?;
         let buffer = u16::from_be_bytes(buffer);
+
+        let crc = does_crc_match::<4>(&raw_command, buffer);
+        if !crc.is_value_match {
+            // NOTE: just log error for now
+            loge!(
+                "crc not match, expected {}, got {}",
+                crc.expected_value,
+                crc.real_value
+            );
+        }
+
         logi!("write result{}", buffer);
 
         Ok(buffer)

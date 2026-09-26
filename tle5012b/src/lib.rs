@@ -2,6 +2,7 @@
 
 use crate::reg::status_reg::StatusRegister;
 pub mod communication;
+pub(crate) mod crc_table;
 pub mod device;
 pub(crate) mod reg;
 
