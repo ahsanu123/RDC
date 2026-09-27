@@ -1,4 +1,16 @@
+use crate::device::DeviceTrait;
+use bilge::prelude::*;
 use bitflags::bitflags;
+
+// Field Bits Type Description
+//
+// MAG 9:0 ru Angle Vector Magnitude
+//     Unsigned Angle Vector Magnitude after X, Y error
+//     compensation (due to temperature).
+//     This field allows additional safety checks.
+//     Formula:
+//     MAG = (SQRT(X*X+Y*Y))/64
+//     Reset: 0H
 
 bitflags! {
     // address = 11H
@@ -7,9 +19,44 @@ bitflags! {
     // r = readonly
     // w = writeable
     // wu = writeable and update
-    pub struct AngleVectorMagnitued: u16{
+    #[derive(Default)]
+    pub struct AngleVectorMagnitudeRegister: u16{
                                            //FEDC_BA98_7654_3210
         const ANGLE_VECTOR_MAGNITUDE_RU  = 0b0000_0011_1111_1111;
 
     }
+}
+
+pub trait AngleVectorMagnitudeRegisterHandler<SPI, DELAY, DEVICE>
+where
+    SPI: embedded_hal::spi::SpiDevice,
+    DELAY: embedded_hal::delay::DelayNs,
+    DEVICE: DeviceTrait<SPI, DELAY>,
+{
+    fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error>;
+    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
+}
+
+impl<SPI, DELAY, DEVICE> AngleVectorMagnitudeRegisterHandler<SPI, DELAY, DEVICE>
+    for AngleVectorMagnitudeRegister
+where
+    SPI: embedded_hal::spi::SpiDevice,
+    DELAY: embedded_hal::delay::DelayNs,
+    DEVICE: DeviceTrait<SPI, DELAY>,
+{
+    fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error> {
+        todo!()
+    }
+
+    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error> {
+        todo!()
+    }
+}
+
+#[bitsize(16)]
+#[derive(FromBits)]
+// LSB field write first
+pub struct AngleVectorMagnitudeRegisterStructure {
+    angle_vector_magnitude: u10,
+    reserved_15_10: u6,
 }

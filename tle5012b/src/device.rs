@@ -6,6 +6,7 @@ use crate::{
     },
     crc_table::does_crc_match,
 };
+use bilge::prelude::*;
 use embedded_hal::spi::Operation;
 
 #[allow(unused_macros)]
@@ -26,13 +27,39 @@ macro_rules! loge {
 
 const RW_DELAY: u32 = 180;
 
+pub struct DeviceInner<SPI, DELAY>
+where
+    SPI: embedded_hal::spi::SpiDevice,
+    DELAY: embedded_hal::delay::DelayNs,
+{
+    spi: SPI,
+    delay: DELAY,
+}
+
+impl<SPI, DELAY> DeviceInner<SPI, DELAY>
+where
+    SPI: embedded_hal::spi::SpiDevice,
+    DELAY: embedded_hal::delay::DelayNs,
+{
+    pub fn new(spi: SPI, delay: DELAY) -> Self {
+        Self { spi, delay }
+    }
+}
+
 pub trait DeviceTrait<SPI, DELAY>
 where
     SPI: embedded_hal::spi::SpiDevice,
     DELAY: embedded_hal::delay::DelayNs,
 {
     fn read(&mut self, address: PossibleAddress) -> Result<u32, SPI::Error>;
+
     fn write(&mut self, address: PossibleAddress, data: u16) -> Result<u16, SPI::Error>;
+
+    fn read_then_mutate<T: Bitsized, FN: FnMut(T)>(
+        &mut self,
+        address: PossibleAddress,
+        mutator_fn: FN,
+    ) -> Result<u32, SPI::Error>;
 }
 
 impl<SPI, DELAY> DeviceTrait<SPI, DELAY> for TLE5012B<SPI, DELAY>
@@ -50,12 +77,15 @@ where
         // for data and safety word
         let mut buffer: [u8; 4] = [0u8; 4];
 
-        self.spi
+        self.inner
+            .spi
             .transaction(&mut [Operation::Write(&raw_command)])?;
 
         // minimum 130 ns
-        self.delay.delay_ns(RW_DELAY);
-        self.spi.transaction(&mut [Operation::Read(&mut buffer)])?;
+        self.inner.delay.delay_ns(RW_DELAY);
+        self.inner
+            .spi
+            .transaction(&mut [Operation::Read(&mut buffer)])?;
 
         let buffer = u32::from_be_bytes(buffer);
 
@@ -80,16 +110,19 @@ where
 
         let mut buffer: [u8; 2] = [0u8, 2];
 
-        self.spi
+        self.inner
+            .spi
             .transaction(&mut [Operation::Write(&raw_command)])?;
 
-        self.delay.delay_ns(RW_DELAY);
+        self.inner.delay.delay_ns(RW_DELAY);
 
         // TODO:
         // if something not work, check here!!
         // word (16)
         // for data and safety word
-        self.spi.transaction(&mut [Operation::Read(&mut buffer)])?;
+        self.inner
+            .spi
+            .transaction(&mut [Operation::Read(&mut buffer)])?;
         let buffer = u16::from_be_bytes(buffer);
 
         let crc = does_crc_match::<4>(&raw_command, buffer);
@@ -105,5 +138,36 @@ where
         logi!("write result{}", buffer);
 
         Ok(buffer)
+    }
+
+    fn read_then_mutate<T: Bitsized, FN: FnMut(T)>(
+        &mut self,
+        address: PossibleAddress,
+        mutator_fn: FN,
+    ) -> Result<u32, <SPI>::Error> {
+        let read_result = self.read(address)?;
+
+        // TODO: mutate
+
+        // self.write(address, result)
+
+        // let command = Command::read_command(address);
+        // let raw_command: [u8; 2] = command.value().to_be_bytes();
+        //
+        // let mut buffer: [u8; 4] = [0u8; 4];
+        //
+        // self.spi
+        //     .transaction(&mut [Operation::Write(&raw_command)])?;
+        //
+        // // minimum 130 ns
+        // self.delay.delay_ns(RW_DELAY);
+        // self.spi.transaction(&mut [Operation::Read(&mut buffer)])?;
+        //
+        // // match address {}
+        //
+        // let buffer = u32::from_be_bytes(buffer);
+
+        // Ok(buffer)
+        todo!()
     }
 }

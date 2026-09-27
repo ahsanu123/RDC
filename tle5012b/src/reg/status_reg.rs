@@ -10,7 +10,8 @@ bitflags! {
     // ru = read or upate
     // r = readonly
     // w = writeable
-    pub struct StatusRegisterBits: u16{
+    #[derive(Default)]
+    pub struct StatusRegister: u16{
                                                           //FEDC_BA98_7654_3210
         const READ_STATUS_RU                            = 0b1000_0000_0000_0000;
         const SLAVE_NUMBER_W                            = 0b0110_0000_0000_0000;
@@ -28,6 +29,60 @@ bitflags! {
         const STATUS_WATCHDOG_R                         = 0b0000_0000_0000_0010;
         const STATUS_RESET_R                            = 0b0000_0000_0000_0001;
     }
+}
+
+pub trait StatusRegisterHandler<SPI, DELAY, DEVICE>
+where
+    SPI: SpiDevice,
+    DELAY: DelayNs,
+    DEVICE: DeviceTrait<SPI, DELAY>,
+{
+    fn read_status(&mut self, dev: &mut DEVICE) -> Result<StatusRegisterStructure, SPI::Error>;
+    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
+}
+
+impl<SPI, DELAY, DEVICE> StatusRegisterHandler<SPI, DELAY, DEVICE> for StatusRegister
+where
+    SPI: SpiDevice,
+    DELAY: DelayNs,
+    DEVICE: DeviceTrait<SPI, DELAY>,
+{
+    fn read_status(&mut self, dev: &mut DEVICE) -> Result<StatusRegisterStructure, <SPI>::Error> {
+        let data = dev.read(PossibleAddress::StatusRegister)?;
+        let safety_word = (data as u16);
+        // TODO: remove expect
+        let status = StatusRegisterStructure::from(u16::new((data >> 16) as u16));
+
+        Ok(status)
+    }
+
+    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), <SPI>::Error> {
+        todo!()
+    }
+}
+
+#[bitsize(16)]
+#[derive(FromBits)]
+// LSB field write first
+pub struct StatusRegisterStructure {
+    pub status_reset: StatusReset,
+    pub status_watchdog: StatusWatchdog,
+    pub status_voltage_regulator: StatusVoltageRegulator,
+    pub status_fuse_crc: StatusFuseCRC,
+    pub status_dsp_unit: StatusDSPUnit,
+    pub status_stack_overflow: StackOverflow,
+    pub status_xy_data_out: StatusXYDataOut,
+    pub status_gmr_magnitude: StatusGMRMagnitude,
+
+    //reserved
+    reserved: u1,
+
+    pub status_adc_test: StatusADCTest,
+    pub status_rom: StatusROM,
+    pub status_gmr_xy_val: GMRXYVal,
+    pub status_gmr_angle_val: GMRAngleVal,
+    pub slave_number: SlaveNumber,
+    pub read_status: ReadStatus,
 }
 
 #[bitsize(1)]
@@ -129,60 +184,4 @@ pub enum StatusWatchdog {
 pub enum StatusReset {
     NoResetSinceLastReadOut = 0,
     ResetHappen,
-}
-
-#[bitsize(16)]
-#[derive(FromBits)]
-// LSB field write first
-pub struct StatusRegisterStructure {
-    pub status_reset: StatusReset,
-    pub status_watchdog: StatusWatchdog,
-    pub status_voltage_regulator: StatusVoltageRegulator,
-    pub status_fuse_crc: StatusFuseCRC,
-    pub status_dsp_unit: StatusDSPUnit,
-    pub status_stack_overflow: StackOverflow,
-    pub status_xy_data_out: StatusXYDataOut,
-    pub status_gmr_magnitude: StatusGMRMagnitude,
-
-    //reserved
-    reserved: u1,
-
-    pub status_adc_test: StatusADCTest,
-    pub status_rom: StatusROM,
-    pub status_gmr_xy_val: GMRXYVal,
-    pub status_gmr_angle_val: GMRAngleVal,
-    pub slave_number: SlaveNumber,
-    pub read_status: ReadStatus,
-}
-
-pub trait StatusRegisterHandler<SPI, DELAY, DEVICE>
-where
-    SPI: SpiDevice,
-    DELAY: DelayNs,
-    DEVICE: DeviceTrait<SPI, DELAY>,
-{
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<StatusRegisterStructure, SPI::Error>;
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
-}
-
-pub struct StatusRegister {}
-
-impl<SPI, DELAY, DEVICE> StatusRegisterHandler<SPI, DELAY, DEVICE> for StatusRegister
-where
-    SPI: SpiDevice,
-    DELAY: DelayNs,
-    DEVICE: DeviceTrait<SPI, DELAY>,
-{
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<StatusRegisterStructure, <SPI>::Error> {
-        let data = dev.read(PossibleAddress::StatusRegister)?;
-        let safety_word = (data as u16);
-        // TODO: remove expect
-        let status = StatusRegisterStructure::from(u16::new((data >> 16) as u16));
-
-        Ok(status)
-    }
-
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), <SPI>::Error> {
-        todo!()
-    }
 }

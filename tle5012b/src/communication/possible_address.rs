@@ -1,4 +1,6 @@
 use bilge::prelude::*;
+
+use crate::{communication::safety_word::SafetyWord, reg::status_reg::StatusRegisterStructure};
 // STAT        STATus register                 00H
 // ACSTAT      ACtivation STATus register      01H
 // AVAL        Angle VALue register            02H
@@ -47,4 +49,39 @@ pub enum PossibleAddress {
     TemperatureSensorRawValue = 0x15,    // 15H
     IifCounterValue = 0x20,              // 20H
     Temperature25cOffsetValue = 0x30,    // 30H
+}
+
+pub fn resulted_register<T: Bitsized>(address: PossibleAddress, raw_val: u32) -> (T, SafetyWord) {
+    let upper_byte = (raw_val >> 16) as u16;
+    let lower_byte = (raw_val & 0xFFFF) as u16;
+
+    let safety_word = SafetyWord::from(lower_byte);
+
+    let retval = match address {
+        PossibleAddress::StatusRegister => StatusRegisterStructure::from(upper_byte),
+        PossibleAddress::ActivationStatusRegister => todo!(),
+        PossibleAddress::AngleValueRegister => todo!(),
+        PossibleAddress::AngleSpeedRegister => todo!(),
+        PossibleAddress::AngleRevolutionRegister => todo!(),
+        PossibleAddress::FrameSynchronizationRegister => todo!(),
+        PossibleAddress::InterfaceMode1Register => todo!(),
+        PossibleAddress::SilRegister => todo!(),
+        PossibleAddress::InterfaceMode2Register => todo!(),
+        PossibleAddress::InterfaceMode3Register => todo!(),
+        PossibleAddress::OffsetX => todo!(),
+        PossibleAddress::OffsetY => todo!(),
+        PossibleAddress::Synchronicity => todo!(),
+        PossibleAddress::IfabRegister => todo!(),
+        PossibleAddress::InterfaceMode4Register => todo!(),
+        PossibleAddress::TemperatureCoefficientReg => todo!(),
+        PossibleAddress::AdcXRawValue => todo!(),
+        PossibleAddress::AdcYRawValue => todo!(),
+        PossibleAddress::AngleVectorMagnitude => todo!(),
+        PossibleAddress::TemperatureSensorRawValue => todo!(),
+        PossibleAddress::IifCounterValue => todo!(),
+        PossibleAddress::Temperature25cOffsetValue => todo!(),
+    };
+
+    todo!()
+    // (retval, safety_word)
 }

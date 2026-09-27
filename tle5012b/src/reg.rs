@@ -25,25 +25,51 @@
 //
 // data transfer (data-write example)
 //      <COMMAND> <WRITE Data 1> [...delay...] <SAFETY-WORD>
-pub(crate) mod activation_status_reg;
-pub(crate) mod adcx_raw_val;
-pub(crate) mod adcy_raw_val;
-pub(crate) mod angle_revolution_reg;
-pub(crate) mod angle_speed_reg;
-pub(crate) mod angle_value_reg;
-pub(crate) mod angle_vector_magnitude;
-pub(crate) mod frame_sync_reg;
-pub(crate) mod ifab_reg;
-pub(crate) mod iif_counter_val;
-pub(crate) mod mode1_reg;
-pub(crate) mod mode2_reg;
-pub(crate) mod mode3_reg;
-pub(crate) mod mode4_reg;
-pub(crate) mod offset_x;
-pub(crate) mod offset_y;
-pub(crate) mod sil_reg;
-pub(crate) mod status_reg;
-pub(crate) mod synchronicity;
-pub(crate) mod temperature25_offset_val;
-pub(crate) mod temperature_coefficient_reg;
-pub(crate) mod temperature_sensor_raw_val;
+pub mod activation_status_reg;
+pub mod adcx_raw_val;
+pub mod adcy_raw_val;
+pub mod angle_revolution_reg;
+pub mod angle_speed_reg;
+pub mod angle_value_reg;
+pub mod angle_vector_magnitude;
+pub mod frame_sync_reg;
+pub mod ifab_reg;
+pub mod iif_counter_val;
+pub mod mode1_reg;
+pub mod mode2_reg;
+pub mod mode3_reg;
+pub mod mode4_reg;
+pub mod offset_x;
+pub mod offset_y;
+pub mod sil_reg;
+pub mod status_reg;
+pub mod synchronicity;
+pub mod temperature25_offset_val;
+pub mod temperature_coefficient_reg;
+pub mod temperature_sensor_raw_val;
+
+pub mod prelude {
+
+    pub use super::activation_status_reg::*;
+    pub use super::adcx_raw_val::*;
+    pub use super::adcy_raw_val::*;
+    pub use super::angle_revolution_reg::*;
+    pub use super::angle_speed_reg::*;
+    pub use super::angle_value_reg::*;
+    pub use super::angle_vector_magnitude::*;
+    pub use super::frame_sync_reg::*;
+    pub use super::ifab_reg::*;
+    pub use super::iif_counter_val::*;
+    pub use super::mode1_reg::*;
+    pub use super::mode2_reg::*;
+    pub use super::mode3_reg::*;
+    pub use super::mode4_reg::*;
+    pub use super::offset_x::*;
+    pub use super::offset_y::*;
+    pub use super::sil_reg::*;
+    pub use super::status_reg::*;
+    pub use super::synchronicity::*;
+    pub use super::temperature_coefficient_reg::*;
+    pub use super::temperature_sensor_raw_val::*;
+    pub use super::temperature25_offset_val::*;
+}
