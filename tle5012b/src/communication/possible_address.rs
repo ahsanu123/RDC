@@ -1,6 +1,6 @@
+use crate::reg::status_reg::*;
+use crate::{communication::safety_word::SafetyWord, reg::prelude::*};
 use bilge::prelude::*;
-
-use crate::{communication::safety_word::SafetyWord, reg::status_reg::StatusRegisterStructure};
 // STAT        STATus register                 00H
 // ACSTAT      ACtivation STATus register      01H
 // AVAL        Angle VALue register            02H
@@ -33,15 +33,15 @@ pub enum PossibleAddress {
     AngleSpeedRegister = 0x03,           // 03H
     AngleRevolutionRegister = 0x04,      // 04H
     FrameSynchronizationRegister = 0x05, // 05H
-    InterfaceMode1Register = 0x06,       // 06H
+    Mode1Register = 0x06,                // 06H
     SilRegister = 0x07,                  // 07H
-    InterfaceMode2Register = 0x08,       // 08H
-    InterfaceMode3Register = 0x09,       // 09H
+    Mode2Register = 0x08,                // 08H
+    Mode3Register = 0x09,                // 09H
     OffsetX = 0x0A,                      // 0AH
     OffsetY = 0x0B,                      // 0BH
     Synchronicity = 0x0C,                // 0CH
     IfabRegister = 0x0D,                 // 0DH
-    InterfaceMode4Register = 0x0E,       // 0EH
+    Mode4Register = 0x0E,                // 0EH
     TemperatureCoefficientReg = 0x0F,    // 0FH
     AdcXRawValue = 0x10,                 // 10H
     AdcYRawValue = 0x11,                 // 11H
@@ -51,37 +51,14 @@ pub enum PossibleAddress {
     Temperature25cOffsetValue = 0x30,    // 30H
 }
 
-pub fn resulted_register<T: Bitsized>(address: PossibleAddress, raw_val: u32) -> (T, SafetyWord) {
+pub fn resulted_register<T>(raw_val: u32) -> (T, SafetyWord)
+where
+    T: RegisterFromRaw,
+{
     let upper_byte = (raw_val >> 16) as u16;
     let lower_byte = (raw_val & 0xFFFF) as u16;
 
     let safety_word = SafetyWord::from(lower_byte);
 
-    let retval = match address {
-        PossibleAddress::StatusRegister => StatusRegisterStructure::from(upper_byte),
-        PossibleAddress::ActivationStatusRegister => todo!(),
-        PossibleAddress::AngleValueRegister => todo!(),
-        PossibleAddress::AngleSpeedRegister => todo!(),
-        PossibleAddress::AngleRevolutionRegister => todo!(),
-        PossibleAddress::FrameSynchronizationRegister => todo!(),
-        PossibleAddress::InterfaceMode1Register => todo!(),
-        PossibleAddress::SilRegister => todo!(),
-        PossibleAddress::InterfaceMode2Register => todo!(),
-        PossibleAddress::InterfaceMode3Register => todo!(),
-        PossibleAddress::OffsetX => todo!(),
-        PossibleAddress::OffsetY => todo!(),
-        PossibleAddress::Synchronicity => todo!(),
-        PossibleAddress::IfabRegister => todo!(),
-        PossibleAddress::InterfaceMode4Register => todo!(),
-        PossibleAddress::TemperatureCoefficientReg => todo!(),
-        PossibleAddress::AdcXRawValue => todo!(),
-        PossibleAddress::AdcYRawValue => todo!(),
-        PossibleAddress::AngleVectorMagnitude => todo!(),
-        PossibleAddress::TemperatureSensorRawValue => todo!(),
-        PossibleAddress::IifCounterValue => todo!(),
-        PossibleAddress::Temperature25cOffsetValue => todo!(),
-    };
-
-    todo!()
-    // (retval, safety_word)
+    (T::from(upper_byte), safety_word)
 }

@@ -2,7 +2,10 @@ use bilge::prelude::*;
 use bitflags::bitflags;
 use embedded_hal::{delay::DelayNs, spi::SpiDevice};
 
-use crate::{communication::possible_address::PossibleAddress, device::DeviceTrait};
+use crate::{
+    communication::possible_address::PossibleAddress, device::DeviceTrait,
+    reg::prelude::RegisterFromRaw,
+};
 
 bitflags! {
     // address = 00H
@@ -58,6 +61,14 @@ where
 
     fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), <SPI>::Error> {
         todo!()
+    }
+}
+
+impl RegisterFromRaw for StatusRegisterStructure {
+    const ADDRESS: PossibleAddress = PossibleAddress::StatusRegister;
+
+    fn into_u16(self) -> u16 {
+        self.value
     }
 }
 

@@ -50,6 +50,8 @@ pub mod temperature_sensor_raw_val;
 
 pub mod prelude {
 
+    use crate::communication::possible_address::PossibleAddress;
+
     pub use super::activation_status_reg::*;
     pub use super::adcx_raw_val::*;
     pub use super::adcy_raw_val::*;
@@ -72,4 +74,34 @@ pub mod prelude {
     pub use super::temperature_coefficient_reg::*;
     pub use super::temperature_sensor_raw_val::*;
     pub use super::temperature25_offset_val::*;
+
+    pub trait RegisterFromRaw: From<u16> {
+        const ADDRESS: PossibleAddress;
+        fn into_u16(self) -> u16;
+    }
+
+    pub enum PossibleRegister {
+        StatusRegister(StatusRegisterStructure),
+        ActivationStatusRegister(ActivationStatusRegisterStructure),
+        AngleValueRegister(AngleValueRegisterStructure),
+        AngleSpeedRegister(AngleSpeedRegisterStructure),
+        AngleRevolutionRegister(AngleRevolutionRegisterStructure),
+        FrameSynchronizationRegister(FrameSyncRegisterStructure),
+        Mode1Register(Mode1RegisterStructure),
+        SilRegister(SILRegisterStructure),
+        Mode2Register(Mode2RegisterStructure),
+        Mode3Register(Mode3RegisterStructure),
+        OffsetX(OffsetXRegisterStructure),
+        OffsetY(OffsetYRegisterStructure),
+        Synchronicity(SynchronicityRegisterStructure),
+        IfabRegister(IFABRegisterStructure),
+        Mode4Register(Mode4RegisterStructure),
+        TemperatureCoefficientReg(TemperatureCoefficientRegisterStructure),
+        AdcXRawValue(ADCXRawValueRegisterStructure),
+        AdcYRawValue(ADCYRawValueRegisterStructure),
+        AngleVectorMagnitude(AngleVectorMagnitudeRegisterStructure),
+        TemperatureSensorRawValue(TemperatureSensorRawValueRegisterStructure),
+        IifCounterValue(IIFCounterValueRegisterStructure),
+        Temperature25cOffsetValue(Temperature25OffsetValueRegisterStructure),
+    }
 }

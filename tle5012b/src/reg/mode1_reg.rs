@@ -1,4 +1,7 @@
-use crate::device::DeviceTrait;
+use crate::{
+    communication::possible_address::PossibleAddress, device::DeviceTrait,
+    reg::prelude::RegisterFromRaw,
+};
 use bilge::prelude::*;
 use bitflags::bitflags;
 
@@ -75,6 +78,14 @@ where
 
     fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error> {
         todo!()
+    }
+}
+
+impl RegisterFromRaw for Mode1RegisterStructure {
+    const ADDRESS: PossibleAddress = PossibleAddress::Mode1Register;
+
+    fn into_u16(self) -> u16 {
+        self.value
     }
 }
 

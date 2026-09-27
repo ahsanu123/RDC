@@ -1,4 +1,7 @@
-use crate::device::DeviceTrait;
+use crate::{
+    communication::possible_address::PossibleAddress, device::DeviceTrait,
+    reg::prelude::RegisterFromRaw,
+};
 use bilge::prelude::*;
 use bitflags::bitflags;
 
@@ -47,6 +50,14 @@ where
 
     fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error> {
         todo!()
+    }
+}
+
+impl RegisterFromRaw for Temperature25OffsetValueRegisterStructure {
+    const ADDRESS: PossibleAddress = PossibleAddress::Temperature25cOffsetValue;
+
+    fn into_u16(self) -> u16 {
+        self.value
     }
 }
 

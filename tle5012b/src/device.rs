@@ -2,9 +2,11 @@ use crate::{
     TLE5012B,
     communication::{
         command::{Command, CommandWithWordData},
-        possible_address::PossibleAddress,
+        possible_address::{PossibleAddress, resulted_register},
+        safety_word::SafetyWord,
     },
     crc_table::does_crc_match,
+    reg::prelude::{PossibleRegister, RegisterFromRaw},
 };
 use bilge::prelude::*;
 use embedded_hal::spi::Operation;
@@ -55,11 +57,13 @@ where
 
     fn write(&mut self, address: PossibleAddress, data: u16) -> Result<u16, SPI::Error>;
 
-    fn read_then_mutate<T: Bitsized, FN: FnMut(T)>(
+    fn read_then_mutate<T>(
         &mut self,
         address: PossibleAddress,
-        mutator_fn: FN,
-    ) -> Result<u32, SPI::Error>;
+        mutator_fn: impl FnOnce(&mut T),
+    ) -> Result<SafetyWord, <SPI>::Error>
+    where
+        T: RegisterFromRaw;
 }
 
 impl<SPI, DELAY> DeviceTrait<SPI, DELAY> for TLE5012B<SPI, DELAY>
@@ -140,34 +144,23 @@ where
         Ok(buffer)
     }
 
-    fn read_then_mutate<T: Bitsized, FN: FnMut(T)>(
+    fn read_then_mutate<T>(
         &mut self,
         address: PossibleAddress,
-        mutator_fn: FN,
-    ) -> Result<u32, <SPI>::Error> {
-        let read_result = self.read(address)?;
+        mutator_fn: impl FnOnce(&mut T),
+    ) -> Result<SafetyWord, <SPI>::Error>
+    where
+        T: RegisterFromRaw,
+    {
+        let raw_val = self.read(address.clone())?;
+        let (mut reg_val, safety_word) = resulted_register::<T>(raw_val);
 
-        // TODO: mutate
+        // TODO: do something with safety_word
 
-        // self.write(address, result)
+        mutator_fn(&mut reg_val);
 
-        // let command = Command::read_command(address);
-        // let raw_command: [u8; 2] = command.value().to_be_bytes();
-        //
-        // let mut buffer: [u8; 4] = [0u8; 4];
-        //
-        // self.spi
-        //     .transaction(&mut [Operation::Write(&raw_command)])?;
-        //
-        // // minimum 130 ns
-        // self.delay.delay_ns(RW_DELAY);
-        // self.spi.transaction(&mut [Operation::Read(&mut buffer)])?;
-        //
-        // // match address {}
-        //
-        // let buffer = u32::from_be_bytes(buffer);
+        let write_result = self.write(address, reg_val.into_u16())?;
 
-        // Ok(buffer)
-        todo!()
+        Ok(SafetyWord::from(write_result))
     }
 }

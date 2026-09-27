@@ -5,7 +5,10 @@ pub(crate) mod crc_table;
 pub mod device;
 pub(crate) mod reg;
 
-use crate::{device::DeviceInner, reg::prelude::*};
+use crate::{
+    device::{DeviceInner, DeviceTrait},
+    reg::prelude::*,
+};
 
 pub struct TLE5012B<SPI, DELAY>
 where
@@ -68,5 +71,14 @@ where
             iif_counter_value_reg: IIFCounterValueRegister::default(),
             temperature_25_offset_value_reg: Temperature25OffsetValueRegister::default(),
         }
+    }
+
+    pub fn change_config(&mut self) {
+        self.read_then_mutate::<StatusRegisterStructure>(
+            communication::possible_address::PossibleAddress::StatusRegister,
+            |status_reg| {
+                status_reg.set_status_reset(StatusReset::ResetHappen);
+            },
+        );
     }
 }
