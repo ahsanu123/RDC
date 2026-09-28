@@ -44,7 +44,6 @@ impl Command {
     pub fn write_command(address: PossibleAddress) -> Self {
         let mut mutated_read_command = Self::read_command(address);
 
-        mutated_read_command.set_update_register(PossibleUpdateOperation::AccessThenUpdate);
         mutated_read_command.set_operation(ICOperation::Write);
 
         mutated_read_command
@@ -58,10 +57,15 @@ impl Command {
 #[bitsize(32, new = pub)]
 #[derive(TryFromBits)]
 pub struct CommandWithWordData {
-    pub command: Command,
     pub word_data: u16,
+    pub command: Command,
 }
+
 impl CommandWithWordData {
+    pub fn from_parts(command: Command, word_data: u16) -> Self {
+        Self::new(word_data, command)
+    }
+
     pub fn value(&self) -> u32 {
         self.value
     }

@@ -82,21 +82,19 @@ bitflags! {
     }
 }
 
-pub trait Mode4RegisterHandler<SPI, DELAY, DEVICE>
+pub trait Mode4RegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,
-    DELAY: embedded_hal::delay::DelayNs,
-    DEVICE: DeviceTrait<SPI, DELAY>,
+    DEVICE: DeviceTrait<SPI>,
 {
     fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error>;
     fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
 }
 
-impl<SPI, DELAY, DEVICE> Mode4RegisterHandler<SPI, DELAY, DEVICE> for Mode4Register
+impl<SPI, DEVICE> Mode4RegisterHandler<SPI, DEVICE> for Mode4Register
 where
     SPI: embedded_hal::spi::SpiDevice,
-    DELAY: embedded_hal::delay::DelayNs,
-    DEVICE: DeviceTrait<SPI, DELAY>,
+    DEVICE: DeviceTrait<SPI>,
 {
     fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error> {
         todo!()

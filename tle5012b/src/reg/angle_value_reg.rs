@@ -39,21 +39,19 @@ bitflags! {
     }
 }
 
-pub trait AngleValueRegisterHandler<SPI, DELAY, DEVICE>
+pub trait AngleValueRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,
-    DELAY: embedded_hal::delay::DelayNs,
-    DEVICE: DeviceTrait<SPI, DELAY>,
+    DEVICE: DeviceTrait<SPI>,
 {
     fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error>;
     fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
 }
 
-impl<SPI, DELAY, DEVICE> AngleValueRegisterHandler<SPI, DELAY, DEVICE> for AngleValueRegister
+impl<SPI, DEVICE> AngleValueRegisterHandler<SPI, DEVICE> for AngleValueRegister
 where
     SPI: embedded_hal::spi::SpiDevice,
-    DELAY: embedded_hal::delay::DelayNs,
-    DEVICE: DeviceTrait<SPI, DELAY>,
+    DEVICE: DeviceTrait<SPI>,
 {
     fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error> {
         todo!()

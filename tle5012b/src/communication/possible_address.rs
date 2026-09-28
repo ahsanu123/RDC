@@ -1,4 +1,3 @@
-use crate::reg::status_reg::*;
 use crate::{communication::safety_word::SafetyWord, reg::prelude::*};
 use bilge::prelude::*;
 // STAT        STATus register                 00H
@@ -55,10 +54,8 @@ pub fn resulted_register<T>(raw_val: u32) -> (T, SafetyWord)
 where
     T: RegisterFromRaw,
 {
-    let upper_byte = (raw_val >> 16) as u16;
-    let lower_byte = (raw_val & 0xFFFF) as u16;
+    let register_word = (raw_val >> 16) as u16;
+    let safety_word = (raw_val & 0xFFFF) as u16;
 
-    let safety_word = SafetyWord::from(lower_byte);
-
-    (T::from(upper_byte), safety_word)
+    (T::from(register_word), SafetyWord::from(safety_word))
 }

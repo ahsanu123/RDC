@@ -1,6 +1,6 @@
 use bilge::prelude::*;
 use bitflags::bitflags;
-use embedded_hal::{delay::DelayNs, spi::SpiDevice};
+use embedded_hal::spi::SpiDevice;
 
 use crate::{
     communication::possible_address::PossibleAddress, device::DeviceTrait,
@@ -34,26 +34,22 @@ bitflags! {
     }
 }
 
-pub trait StatusRegisterHandler<SPI, DELAY, DEVICE>
+pub trait StatusRegisterHandler<SPI, DEVICE>
 where
     SPI: SpiDevice,
-    DELAY: DelayNs,
-    DEVICE: DeviceTrait<SPI, DELAY>,
+    DEVICE: DeviceTrait<SPI>,
 {
     fn read_status(&mut self, dev: &mut DEVICE) -> Result<StatusRegisterStructure, SPI::Error>;
     fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
 }
 
-impl<SPI, DELAY, DEVICE> StatusRegisterHandler<SPI, DELAY, DEVICE> for StatusRegister
+impl<SPI, DEVICE> StatusRegisterHandler<SPI, DEVICE> for StatusRegister
 where
     SPI: SpiDevice,
-    DELAY: DelayNs,
-    DEVICE: DeviceTrait<SPI, DELAY>,
+    DEVICE: DeviceTrait<SPI>,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<StatusRegisterStructure, <SPI>::Error> {
+    fn read_status(&mut self, dev: &mut DEVICE) -> Result<StatusRegisterStructure, SPI::Error> {
         let data = dev.read(PossibleAddress::StatusRegister)?;
-        let safety_word = (data as u16);
-        // TODO: remove expect
         let status = StatusRegisterStructure::from(u16::new((data >> 16) as u16));
 
         Ok(status)

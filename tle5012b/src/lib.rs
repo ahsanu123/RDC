@@ -6,16 +6,16 @@ pub mod device;
 pub(crate) mod reg;
 
 use crate::{
+    communication::safety_word::SafetyWord,
     device::{DeviceInner, DeviceTrait},
     reg::prelude::*,
 };
 
-pub struct TLE5012B<SPI, DELAY>
+pub struct TLE5012B<SPI>
 where
     SPI: embedded_hal::spi::SpiDevice,
-    DELAY: embedded_hal::delay::DelayNs,
 {
-    inner: DeviceInner<SPI, DELAY>,
+    inner: DeviceInner<SPI>,
 
     status_reg: StatusRegister,
     activation_status_reg: ActivationStatusRegister,
@@ -39,13 +39,12 @@ where
     temperature_25_offset_value_reg: Temperature25OffsetValueRegister,
 }
 
-impl<SPI, DELAY> TLE5012B<SPI, DELAY>
+impl<SPI> TLE5012B<SPI>
 where
     SPI: embedded_hal::spi::SpiDevice,
-    DELAY: embedded_hal::delay::DelayNs,
 {
-    pub fn new(spi: SPI, delay: DELAY) -> Self {
-        let inner = DeviceInner::new(spi, delay);
+    pub fn new(spi: SPI) -> Self {
+        let inner = DeviceInner::new(spi);
 
         Self {
             inner,
@@ -73,12 +72,9 @@ where
         }
     }
 
-    pub fn change_config(&mut self) {
-        self.read_then_mutate::<StatusRegisterStructure>(
-            communication::possible_address::PossibleAddress::StatusRegister,
-            |status_reg| {
-                status_reg.set_status_reset(StatusReset::ResetHappen);
-            },
-        );
+    pub fn change_config(&mut self) -> Result<SafetyWord, SPI::Error> {
+        self.read_then_mutate::<StatusRegisterStructure>(|status_reg| {
+            status_reg.set_status_reset(StatusReset::ResetHappen);
+        })
     }
 }

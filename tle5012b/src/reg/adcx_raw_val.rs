@@ -27,21 +27,19 @@ bitflags! {
     }
 }
 
-pub trait ADCXRawValueRegisterHandler<SPI, DELAY, DEVICE>
+pub trait ADCXRawValueRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,
-    DELAY: embedded_hal::delay::DelayNs,
-    DEVICE: DeviceTrait<SPI, DELAY>,
+    DEVICE: DeviceTrait<SPI>,
 {
     fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error>;
     fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
 }
 
-impl<SPI, DELAY, DEVICE> ADCXRawValueRegisterHandler<SPI, DELAY, DEVICE> for ADCXRawValueRegister
+impl<SPI, DEVICE> ADCXRawValueRegisterHandler<SPI, DEVICE> for ADCXRawValueRegister
 where
     SPI: embedded_hal::spi::SpiDevice,
-    DELAY: embedded_hal::delay::DelayNs,
-    DEVICE: DeviceTrait<SPI, DELAY>,
+    DEVICE: DeviceTrait<SPI>,
 {
     fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error> {
         todo!()

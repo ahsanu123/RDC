@@ -34,7 +34,7 @@ pub struct CRCResult {
 }
 
 // based on example 2 in tle5012b manual pdf
-fn calc_crc<const DATA_LENGTH: usize>(message: &[u8; DATA_LENGTH]) -> u8 {
+pub(crate) fn calc_crc<const DATA_LENGTH: usize>(message: &[u8; DATA_LENGTH]) -> u8 {
     let mut crc: u8 = 0xFF;
 
     (0..DATA_LENGTH).for_each(|index| {
@@ -50,7 +50,7 @@ pub fn does_crc_match<const DATA_LENGTH: usize>(
 ) -> CRCResult {
     let calculated_crc = calc_crc(message);
     // CRC [7..0] Cyclic Redundancy Check (CRC), which includes the STAT and RESP bits
-    let resulted_crc = (result_safety_word & 0b0000_0000_0000_1111) as u8;
+    let resulted_crc = result_safety_word as u8;
 
     CRCResult {
         is_value_match: calculated_crc == resulted_crc,

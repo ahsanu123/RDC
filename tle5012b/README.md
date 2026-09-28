@@ -24,28 +24,24 @@ impl RegisterFromRaw for StatusRegisterStructure {
 // still generic here
 fn read_then_mutate<T>(
     &mut self,
-    address: PossibleAddress,
     mutator_fn: impl FnOnce(&mut T),
-) -> Result<SafetyWord, <SPI>::Error>
+) -> Result<SafetyWord, SPI::Error>
 where
     T: RegisterFromRaw,
 {
-    let raw_val = self.read(address.clone())?;
-    let (mut reg_val, safety_word) = resulted_register::<T>(raw_val);
+    let raw_val = self.read(T::ADDRESS.clone())?;
+    let (mut reg_val, _) = resulted_register::<T>(raw_val);
 
     (...)
 
-    Ok(SafetyWord::from(write_result))
+    self.write(T::ADDRESS, reg_val.into_u16())
 }
 
 // Concrete Type in function user 
-pub fn change_config(&mut self) {
-    self.read_then_mutate::<StatusRegisterStructure>(
-        PossibleAddress::StatusRegister,
-        |status_reg| {
-            status_reg.set_status_reset(StatusReset::ResetHappen);
-        },
-    );
+pub fn change_config(&mut self) -> Result<SafetyWord, SPI::Error> {
+    self.read_then_mutate::<StatusRegisterStructure>(|status_reg| {
+        status_reg.set_status_reset(StatusReset::ResetHappen);
+    })
 }
 ```
 
