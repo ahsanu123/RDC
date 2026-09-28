@@ -79,29 +79,4 @@ pub mod prelude {
         const ADDRESS: PossibleAddress;
         fn into_u16(self) -> u16;
     }
-
-    pub enum PossibleRegister {
-        StatusRegister(StatusRegisterStructure),
-        ActivationStatusRegister(ActivationStatusRegisterStructure),
-        AngleValueRegister(AngleValueRegisterStructure),
-        AngleSpeedRegister(AngleSpeedRegisterStructure),
-        AngleRevolutionRegister(AngleRevolutionRegisterStructure),
-        FrameSynchronizationRegister(FrameSyncRegisterStructure),
-        Mode1Register(Mode1RegisterStructure),
-        SilRegister(SILRegisterStructure),
-        Mode2Register(Mode2RegisterStructure),
-        Mode3Register(Mode3RegisterStructure),
-        OffsetX(OffsetXRegisterStructure),
-        OffsetY(OffsetYRegisterStructure),
-        Synchronicity(SynchronicityRegisterStructure),
-        IfabRegister(IFABRegisterStructure),
-        Mode4Register(Mode4RegisterStructure),
-        TemperatureCoefficientReg(TemperatureCoefficientRegisterStructure),
-        AdcXRawValue(ADCXRawValueRegisterStructure),
-        AdcYRawValue(ADCYRawValueRegisterStructure),
-        AngleVectorMagnitude(AngleVectorMagnitudeRegisterStructure),
-        TemperatureSensorRawValue(TemperatureSensorRawValueRegisterStructure),
-        IifCounterValue(IIFCounterValueRegisterStructure),
-        Temperature25cOffsetValue(Temperature25OffsetValueRegisterStructure),
-    }
 }
