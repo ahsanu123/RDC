@@ -1,5 +1,6 @@
 use crate::{
-    communication::possible_address::PossibleAddress, device::DeviceTrait,
+    communication::possible_address::PossibleAddress,
+    device::{DeviceError, DeviceTrait},
     reg::prelude::RegisterFromRaw,
 };
 use bilge::prelude::*;
@@ -41,11 +42,15 @@ bitflags! {
 
 pub trait AngleValueRegisterHandler<SPI, DEVICE>
 where
-    SPI: embedded_hal::spi::SpiDevice,
     DEVICE: DeviceTrait<SPI>,
+    SPI: embedded_hal::spi::SpiDevice,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error>;
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
+    fn read_raw_angval(&mut self, dev: &mut DEVICE) -> Result<u15, DeviceError<SPI::Error>>;
+    fn new_value_exist(&mut self, dev: &mut DEVICE) -> Result<bool, DeviceError<SPI::Error>>;
+    fn get_reg_value(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<AngleValueRegisterStructure, DeviceError<SPI::Error>>;
 }
 
 impl<SPI, DEVICE> AngleValueRegisterHandler<SPI, DEVICE> for AngleValueRegister
@@ -53,12 +58,33 @@ where
     SPI: embedded_hal::spi::SpiDevice,
     DEVICE: DeviceTrait<SPI>,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error> {
-        todo!()
+    fn read_raw_angval(&mut self, dev: &mut DEVICE) -> Result<u15, DeviceError<<SPI>::Error>> {
+        let raw_val = dev.read(PossibleAddress::AngleValueRegister)?;
+        let raw_val = (raw_val >> 16) as u16;
+
+        let parsed_val = AngleValueRegisterStructure::from(raw_val);
+
+        Ok(parsed_val.calculated_angle_value())
     }
 
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error> {
-        todo!()
+    fn new_value_exist(&mut self, dev: &mut DEVICE) -> Result<bool, DeviceError<<SPI>::Error>> {
+        let raw_val = dev.read(PossibleAddress::AngleValueRegister)?;
+        let raw_val = (raw_val >> 16) as u16;
+        let val = AngleValueRegisterStructure::from(raw_val);
+
+        match val.read_status_angle_value() {
+            ReadStatusAngleValue::NoNewAngleValue => Ok(false),
+            ReadStatusAngleValue::NewAngleValuePresent => Ok(true),
+        }
+    }
+
+    fn get_reg_value(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<AngleValueRegisterStructure, DeviceError<<SPI>::Error>> {
+        let raw_val = dev.read(PossibleAddress::AngleValueRegister)?;
+
+        Ok(AngleValueRegisterStructure::from((raw_val >> 16) as u16))
     }
 }
 
@@ -74,8 +100,8 @@ impl RegisterFromRaw for AngleValueRegisterStructure {
 #[derive(FromBits)]
 // LSB field write first
 pub struct AngleValueRegisterStructure {
-    calculated_angle_value: u15, // require calculation
-    read_status_angle_value: ReadStatusAngleValue,
+    pub calculated_angle_value: u15, // require calculation
+    pub read_status_angle_value: ReadStatusAngleValue,
 }
 
 #[bitsize(1)]

@@ -3,7 +3,9 @@
 pub mod communication;
 pub(crate) mod crc_table;
 pub mod device;
+pub mod models;
 pub(crate) mod reg;
+pub(crate) mod signed_conversion;
 
 use crate::{
     communication::safety_word::SafetyWord,
@@ -17,26 +19,26 @@ where
 {
     inner: DeviceInner<SPI>,
 
-    status_reg: StatusRegister,
-    activation_status_reg: ActivationStatusRegister,
-    angle_value_reg: AngleValueRegister,
-    angle_speed_reg: AngleSpeedRegister,
-    angle_revolution_reg: AngleRevolutionRegister,
-    frame_sync_reg: FrameSyncRegister,
-    mode1_reg: Mode1Register,
-    sil_reg: SILRegister,
-    mode2_reg: Mode2Register,
-    mode3_reg: Mode3Register,
-    offset_x_reg: OffsetXRegister,
-    offset_y_reg: OffsetYRegister,
-    synchronicity_reg: SynchronicityRegister,
-    ifab_reg: IFABRegister,
-    mode4_reg: Mode4Register,
-    temperature_coefficient_reg: TemperatureCoefficientRegister,
-    angle_vector_magnitude_reg: AngleVectorMagnitudeRegister,
-    temperature_sensor_raw_value_reg: TemperatureSensorRawValueRegister,
-    iif_counter_value_reg: IIFCounterValueRegister,
-    temperature_25_offset_value_reg: Temperature25OffsetValueRegister,
+    pub status_reg: StatusRegister,
+    pub activation_status_reg: ActivationStatusRegister,
+    pub angle_value_reg: AngleValueRegister,
+    pub angle_speed_reg: AngleSpeedRegister,
+    pub angle_revolution_reg: AngleRevolutionRegister,
+    pub frame_sync_reg: FrameSyncRegister,
+    pub mode1_reg: Mode1Register,
+    pub sil_reg: SILRegister,
+    pub mode2_reg: Mode2Register,
+    pub mode3_reg: Mode3Register,
+    pub offset_x_reg: OffsetXRegister,
+    pub offset_y_reg: OffsetYRegister,
+    pub synchronicity_reg: SynchronicityRegister,
+    pub ifab_reg: IFABRegister,
+    pub mode4_reg: Mode4Register,
+    pub temperature_coefficient_reg: TemperatureCoefficientRegister,
+    pub angle_vector_magnitude_reg: AngleVectorMagnitudeRegister,
+    pub temperature_sensor_raw_value_reg: TemperatureSensorRawValueRegister,
+    pub iif_counter_value_reg: IIFCounterValueRegister,
+    pub temperature_25_offset_value_reg: Temperature25OffsetValueRegister,
 }
 
 impl<SPI> TLE5012B<SPI>
@@ -73,8 +75,12 @@ where
     }
 
     pub fn change_config(&mut self) -> Result<SafetyWord, SPI::Error> {
-        self.read_then_mutate::<StatusRegisterStructure>(|status_reg| {
-            status_reg.set_status_reset(StatusReset::ResetHappen);
-        })
+        let res = self
+            .inner
+            .read_then_mutate::<StatusRegisterStructure>(|status_reg| {
+                status_reg.set_status_reset(StatusReset::ResetHappen);
+            });
+
+        todo!()
     }
 }

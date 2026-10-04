@@ -60,10 +60,8 @@ pub fn does_crc_match<const DATA_LENGTH: usize>(
 }
 
 #[cfg(test)]
-extern crate std;
-
-#[cfg(test)]
 mod tests {
+    extern crate std;
     use super::*;
 
     #[test]

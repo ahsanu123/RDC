@@ -49,10 +49,11 @@ where
     DEVICE: DeviceTrait<SPI>,
 {
     fn read_status(&mut self, dev: &mut DEVICE) -> Result<StatusRegisterStructure, SPI::Error> {
-        let data = dev.read(PossibleAddress::StatusRegister)?;
-        let status = StatusRegisterStructure::from(u16::new((data >> 16) as u16));
+        // let data = dev.read(PossibleAddress::StatusRegister)?;
+        // let status = StatusRegisterStructure::from(u16::new((data >> 16) as u16));
 
-        Ok(status)
+        // Ok(status)
+        todo!()
     }
 
     fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), <SPI>::Error> {

@@ -20,7 +20,7 @@ use crate::{
     crc_table::does_crc_match,
     reg::prelude::RegisterFromRaw,
 };
-use embedded_hal::spi::Operation;
+use embedded_hal::spi::{Error as SpiErr, Operation};
 
 #[allow(unused_macros)]
 macro_rules! logi {
@@ -85,36 +85,50 @@ fn inspect_safety<const DATA_LENGTH: usize>(
     SafetyWord::from(raw_safety_word)
 }
 
+#[derive(Debug)]
+pub enum DeviceError<SPIError: SpiErr> {
+    SpiError(SPIError),
+    CRCMismatch { expected: u8, got: u8 },
+    // ....
+    // etc ....
+}
+
 pub trait DeviceTrait<SPI>
 where
     SPI: embedded_hal::spi::SpiDevice,
 {
-    fn read(&mut self, address: PossibleAddress) -> Result<u32, SPI::Error>;
+    fn read(&mut self, address: PossibleAddress) -> Result<u32, DeviceError<SPI::Error>>;
 
-    fn write(&mut self, address: PossibleAddress, data: u16) -> Result<SafetyWord, SPI::Error>;
+    fn write(
+        &mut self,
+        address: PossibleAddress,
+        data: u16,
+    ) -> Result<SafetyWord, DeviceError<SPI::Error>>;
 
     fn read_then_mutate<T>(
         &mut self,
         mutator_fn: impl FnOnce(&mut T),
-    ) -> Result<SafetyWord, SPI::Error>
+    ) -> Result<SafetyWord, DeviceError<SPI::Error>>
     where
         T: RegisterFromRaw;
 }
 
-impl<SPI> DeviceTrait<SPI> for TLE5012B<SPI>
+impl<SPI> DeviceTrait<SPI> for DeviceInner<SPI>
 where
     SPI: embedded_hal::spi::SpiDevice,
 {
-    fn read(&mut self, address: PossibleAddress) -> Result<u32, SPI::Error> {
+    fn read(&mut self, address: PossibleAddress) -> Result<u32, DeviceError<SPI::Error>> {
         let command = Command::read_command(address);
         let raw_command: [u8; 2] = command.value().to_be_bytes();
         let mut buffer: [u8; 4] = [0u8; 4];
 
-        self.inner.spi.transaction(&mut [
-            Operation::Write(&raw_command),
-            Operation::DelayNs(RW_DELAY),
-            Operation::Read(&mut buffer),
-        ])?;
+        self.spi
+            .transaction(&mut [
+                Operation::Write(&raw_command),
+                Operation::DelayNs(RW_DELAY),
+                Operation::Read(&mut buffer),
+            ])
+            .map_err(DeviceError::SpiError)?;
 
         let data = u16::from_be_bytes([buffer[0], buffer[1]]);
         let raw_safety_word = u16::from_be_bytes([buffer[2], buffer[3]]);
@@ -126,17 +140,23 @@ where
         Ok(result)
     }
 
-    fn write(&mut self, address: PossibleAddress, data: u16) -> Result<SafetyWord, SPI::Error> {
+    fn write(
+        &mut self,
+        address: PossibleAddress,
+        data: u16,
+    ) -> Result<SafetyWord, DeviceError<SPI::Error>> {
         let command = Command::write_command(address);
         let command_with_word_data = CommandWithWordData::from_parts(command, data);
         let raw_command = command_with_word_data.value().to_be_bytes();
         let mut buffer: [u8; 2] = [0u8; 2];
 
-        self.inner.spi.transaction(&mut [
-            Operation::Write(&raw_command),
-            Operation::DelayNs(RW_DELAY),
-            Operation::Read(&mut buffer),
-        ])?;
+        self.spi
+            .transaction(&mut [
+                Operation::Write(&raw_command),
+                Operation::DelayNs(RW_DELAY),
+                Operation::Read(&mut buffer),
+            ])
+            .map_err(DeviceError::SpiError)?;
 
         let raw_safety_word = u16::from_be_bytes(buffer);
         let safety_word = inspect_safety(&raw_command, raw_safety_word);
@@ -148,7 +168,7 @@ where
     fn read_then_mutate<T>(
         &mut self,
         mutator_fn: impl FnOnce(&mut T),
-    ) -> Result<SafetyWord, SPI::Error>
+    ) -> Result<SafetyWord, DeviceError<SPI::Error>>
     where
         T: RegisterFromRaw,
     {
@@ -243,12 +263,12 @@ mod tests {
             write: Vec::from(command),
             response: response(data, [command[0], command[1], 0x12, 0x34]),
         };
-        let mut device = TLE5012B::new(MockSpi::new(Vec::from([expected])));
+        let mut device = DeviceInner::new(MockSpi::new(Vec::from([expected])));
 
         let raw = device.read(PossibleAddress::StatusRegister).unwrap();
 
         assert_eq!(raw >> 16, data as u32);
-        assert_eq!(device.inner.spi.transaction_count, 1);
+        assert_eq!(device.spi.transaction_count, 1);
     }
 
     #[test]
@@ -259,13 +279,13 @@ mod tests {
             write: Vec::from(command_and_data),
             response: Vec::from([0x70, crc]),
         };
-        let mut device = TLE5012B::new(MockSpi::new(Vec::from([expected])));
+        let mut device = DeviceInner::new(MockSpi::new(Vec::from([expected])));
 
         device
             .write(PossibleAddress::Mode2Register, 0x0804)
             .unwrap();
 
-        assert_eq!(device.inner.spi.transaction_count, 1);
+        assert_eq!(device.spi.transaction_count, 1);
     }
 
     #[test]
@@ -280,7 +300,7 @@ mod tests {
             write: Vec::from(write_command_and_data),
             response: Vec::from([0x70, calc_crc(&write_command_and_data)]),
         };
-        let mut device = TLE5012B::new(MockSpi::new(Vec::from([read, write])));
+        let mut device = DeviceInner::new(MockSpi::new(Vec::from([read, write])));
 
         device
             .read_then_mutate::<StatusRegisterStructure>(|status| {
@@ -288,6 +308,6 @@ mod tests {
             })
             .unwrap();
 
-        assert_eq!(device.inner.spi.transaction_count, 2);
+        assert_eq!(device.spi.transaction_count, 2);
     }
 }
