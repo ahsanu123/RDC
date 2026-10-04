@@ -1,3 +1,15 @@
+mod angle_range_writer;
+mod angle_speed_reader;
+mod angval_reader;
+mod config_writer;
+
+pub mod prelude {
+    pub use super::angle_range_writer::*;
+    pub use super::angle_speed_reader::*;
+    pub use super::angval_reader::*;
+    pub use super::config_writer::*;
+}
+
 use crate::{
     TLE5012B,
     communication::{
