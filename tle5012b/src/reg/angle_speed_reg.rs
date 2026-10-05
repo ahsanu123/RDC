@@ -1,5 +1,6 @@
 use crate::{
-    communication::possible_address::PossibleAddress, device::DeviceTrait,
+    communication::possible_address::PossibleAddress,
+    device::{DeviceError, DeviceTrait},
     reg::prelude::RegisterFromRaw,
 };
 use bilge::prelude::*;
@@ -44,8 +45,11 @@ where
     SPI: embedded_hal::spi::SpiDevice,
     DEVICE: DeviceTrait<SPI>,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error>;
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
+    fn read_angular_speed(&mut self, dev: &mut DEVICE) -> Result<u15, DeviceError<SPI::Error>>;
+    fn get_angular_speed_reg(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<AngleSpeedRegisterStructure, DeviceError<SPI::Error>>;
 }
 
 impl<SPI, DEVICE> AngleSpeedRegisterHandler<SPI, DEVICE> for AngleSpeedRegister
@@ -53,12 +57,24 @@ where
     SPI: embedded_hal::spi::SpiDevice,
     DEVICE: DeviceTrait<SPI>,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error> {
-        todo!()
+    fn read_angular_speed(&mut self, dev: &mut DEVICE) -> Result<u15, DeviceError<<SPI>::Error>> {
+        let raw_val = dev.read(PossibleAddress::AngleSpeedRegister)?;
+        let raw_val = (raw_val >> 16) as u16;
+
+        let parsed_val = AngleSpeedRegisterStructure::from(raw_val);
+
+        Ok(parsed_val.calculated_angle_speed())
     }
 
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error> {
-        todo!()
+    fn get_angular_speed_reg(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<AngleSpeedRegisterStructure, DeviceError<<SPI>::Error>> {
+        let raw_val = dev.read(PossibleAddress::AngleSpeedRegister)?;
+        let raw_val = (raw_val >> 16) as u16;
+
+        let parsed_val = AngleSpeedRegisterStructure::from(raw_val);
+        Ok(parsed_val)
     }
 }
 

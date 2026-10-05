@@ -188,6 +188,7 @@ mod tests {
     use super::*;
     use crate::{
         crc_table::calc_crc,
+        device::angval_reader::AngleValueReader,
         reg::status_reg::{StatusRegisterStructure, StatusReset},
     };
     use embedded_hal::spi::{ErrorKind, ErrorType, SpiDevice};
@@ -253,6 +254,12 @@ mod tests {
         let mut response = Vec::from(data.to_be_bytes());
         response.extend_from_slice(&[0x70, crc]);
         response
+    }
+
+    fn tle5012b_test() {
+        let mut ic = TLE5012B::new(MockSpi::new(Vec::from([])));
+
+        let _angle_val = ic.read_angle_value().unwrap();
     }
 
     #[test]

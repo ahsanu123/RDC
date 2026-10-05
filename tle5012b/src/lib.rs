@@ -7,11 +7,7 @@ pub mod models;
 pub(crate) mod reg;
 pub(crate) mod signed_conversion;
 
-use crate::{
-    communication::safety_word::SafetyWord,
-    device::{DeviceInner, DeviceTrait},
-    reg::prelude::*,
-};
+use crate::{device::DeviceInner, reg::prelude::*};
 
 pub struct TLE5012B<SPI>
 where
@@ -72,15 +68,5 @@ where
             iif_counter_value_reg: IIFCounterValueRegister::default(),
             temperature_25_offset_value_reg: Temperature25OffsetValueRegister::default(),
         }
-    }
-
-    pub fn change_config(&mut self) -> Result<SafetyWord, SPI::Error> {
-        let res = self
-            .inner
-            .read_then_mutate::<StatusRegisterStructure>(|status_reg| {
-                status_reg.set_status_reset(StatusReset::ResetHappen);
-            });
-
-        todo!()
     }
 }

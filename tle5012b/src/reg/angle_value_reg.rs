@@ -58,7 +58,7 @@ where
     SPI: embedded_hal::spi::SpiDevice,
     DEVICE: DeviceTrait<SPI>,
 {
-    fn read_raw_angval(&mut self, dev: &mut DEVICE) -> Result<u15, DeviceError<<SPI>::Error>> {
+    fn read_raw_angval(&mut self, dev: &mut DEVICE) -> Result<u15, DeviceError<SPI::Error>> {
         let raw_val = dev.read(PossibleAddress::AngleValueRegister)?;
         let raw_val = (raw_val >> 16) as u16;
 

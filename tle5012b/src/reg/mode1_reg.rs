@@ -1,5 +1,6 @@
 use crate::{
-    communication::possible_address::PossibleAddress, device::DeviceTrait,
+    communication::possible_address::PossibleAddress,
+    device::{DeviceError, DeviceInner, DeviceTrait},
     reg::prelude::RegisterFromRaw,
 };
 use bilge::prelude::*;
@@ -61,8 +62,10 @@ where
     SPI: embedded_hal::spi::SpiDevice,
     DEVICE: DeviceTrait<SPI>,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error>;
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
+    fn get_mod1_reg(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<Mode1RegisterStructure, DeviceError<SPI::Error>>;
 }
 
 impl<SPI, DEVICE> Mode1RegisterHandler<SPI, DEVICE> for Mode1Register
@@ -70,12 +73,15 @@ where
     SPI: embedded_hal::spi::SpiDevice,
     DEVICE: DeviceTrait<SPI>,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error> {
-        todo!()
-    }
+    fn get_mod1_reg(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<Mode1RegisterStructure, DeviceError<<SPI>::Error>> {
+        let raw_val = dev.read(PossibleAddress::Mode1Register)?;
+        let raw_val = (raw_val >> 16) as u16;
 
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error> {
-        todo!()
+        let parsed_val = Mode1RegisterStructure::from(raw_val);
+        Ok(parsed_val)
     }
 }
 
@@ -91,12 +97,12 @@ impl RegisterFromRaw for Mode1RegisterStructure {
 #[derive(FromBits)]
 // LSB field write first
 pub struct Mode1RegisterStructure {
-    incremental_interface_mode: IncrementalInterfaceMode,
-    hold_dspu_operation: HoldDspuOperation,
-    reserved_3: u1,
-    clock_source_select: ClockSourceSelect,
-    reserved_13_5: u9,
-    update_rate_setting: UpdateRateSetting,
+    pub incremental_interface_mode: IncrementalInterfaceMode,
+    pub hold_dspu_operation: HoldDspuOperation,
+    pub reserved_3: u1,
+    pub clock_source_select: ClockSourceSelect,
+    pub reserved_13_5: u9,
+    pub update_rate_setting: UpdateRateSetting,
 }
 
 #[bitsize(2)]
@@ -125,8 +131,19 @@ pub enum ClockSourceSelect {
 #[bitsize(2)]
 #[derive(FromBits)]
 pub enum UpdateRateSetting {
-    Reserved = 0,
-    Us42_7,
-    Us85_3,
-    Us170_6,
+    Reserved = 0x0,
+    Us42_7 = 0x1,
+    Us85_3 = 0x2,
+    Us170_6 = 0x3,
+}
+
+impl UpdateRateSetting {
+    pub const fn get_rate_in_us(&self) -> f32 {
+        match self {
+            UpdateRateSetting::Us42_7 => 42.7,
+            UpdateRateSetting::Us85_3 => 85.3,
+            UpdateRateSetting::Us170_6 => 170.6,
+            _ => 0.0,
+        }
+    }
 }

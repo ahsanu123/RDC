@@ -1,6 +1,7 @@
 use crate::models::degree::Degree;
 use crate::models::radiant::Radiant;
 use crate::reg::angle_value_reg::ReadStatusAngleValue;
+use crate::reg::mode2_reg::Mode2RegisterHandler;
 use crate::signed_conversion::to_signed;
 use crate::{TLE5012B, device::DeviceError, reg::angle_value_reg::AngleValueRegisterHandler};
 use bilge::prelude::*;
@@ -8,13 +9,12 @@ use bilge::prelude::*;
 pub trait AngleValueReader<SPI: embedded_hal::spi::SpiDevice> {
     fn read_angle_value(&mut self) -> Result<Degree, DeviceError<SPI::Error>>;
     fn check_for_new_angle_value(&mut self) -> Result<Option<Degree>, DeviceError<<SPI>::Error>>;
-    fn convert_to_angle(&mut self, raw_val: u15) -> f32 {
-        let numerator = 360.0;
+    fn convert_to_angle(&mut self, raw_val: u15, angle_range: u16) -> f32 {
         let denominator = 2_u32.pow(15) as f32;
 
         let signed_val = to_signed::<15>(raw_val);
 
-        (numerator / denominator) * signed_val as f32
+        (angle_range as f32 / denominator) * signed_val as f32
     }
 }
 
@@ -24,18 +24,20 @@ where
 {
     fn read_angle_value(&mut self) -> Result<Degree, DeviceError<SPI::Error>> {
         let raw_val: u15 = self.angle_value_reg.read_raw_angval(&mut self.inner)?;
-        let result = self.convert_to_angle(raw_val);
+        let angle_range = self.mode2_reg.get_angle_range_as_degree(&mut self.inner)?;
+        let result = self.convert_to_angle(raw_val, angle_range);
         Ok(Degree { value: result })
     }
 
     fn check_for_new_angle_value(&mut self) -> Result<Option<Degree>, DeviceError<<SPI>::Error>> {
         let reg_struct = self.angle_value_reg.get_reg_value(&mut self.inner)?;
+        let angle_range = self.mode2_reg.get_angle_range_as_degree(&mut self.inner)?;
 
         match reg_struct.read_status_angle_value() {
             ReadStatusAngleValue::NoNewAngleValue => Ok(None),
             ReadStatusAngleValue::NewAngleValuePresent => {
                 let raw_val: u15 = reg_struct.calculated_angle_value();
-                let result = self.convert_to_angle(raw_val);
+                let result = self.convert_to_angle(raw_val, angle_range);
 
                 let some_degree = Some(Degree { value: result });
 

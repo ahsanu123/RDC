@@ -1,5 +1,6 @@
 use crate::{
-    communication::possible_address::PossibleAddress, device::DeviceTrait,
+    communication::possible_address::PossibleAddress,
+    device::{DeviceError, DeviceTrait},
     reg::prelude::RegisterFromRaw,
 };
 use bilge::prelude::*;
@@ -73,8 +74,15 @@ where
     SPI: embedded_hal::spi::SpiDevice,
     DEVICE: DeviceTrait<SPI>,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error>;
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
+    fn get_angle_range_as_degree(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<u16, DeviceError<SPI::Error>>;
+
+    fn get_mod2_reg(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<Mode2RegisterStructure, DeviceError<SPI::Error>>;
 }
 
 impl<SPI, DEVICE> Mode2RegisterHandler<SPI, DEVICE> for Mode2Register
@@ -82,12 +90,27 @@ where
     SPI: embedded_hal::spi::SpiDevice,
     DEVICE: DeviceTrait<SPI>,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<(), SPI::Error> {
-        todo!()
+    fn get_angle_range_as_degree(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<u16, DeviceError<SPI::Error>> {
+        let mod2reg = self.get_mod2_reg(dev)?;
+
+        let multiplier = u16::from(mod2reg.angle_range()) / 128;
+        let degree = 360 * multiplier;
+
+        Ok(degree)
     }
 
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error> {
-        todo!()
+    fn get_mod2_reg(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<Mode2RegisterStructure, DeviceError<<SPI>::Error>> {
+        let raw_val = dev.read(PossibleAddress::Mode2Register)?;
+        let raw_val = (raw_val >> 16) as u16;
+
+        let parsed_val = Mode2RegisterStructure::from(raw_val);
+        Ok(parsed_val)
     }
 }
 
@@ -103,11 +126,11 @@ impl RegisterFromRaw for Mode2RegisterStructure {
 #[derive(FromBits)]
 // LSB field write first
 pub struct Mode2RegisterStructure {
-    autocalibration_mode: AutocalibrationMode,
-    prediction: Prediction,
-    angle_direction: AngleDirection,
-    angle_range: u11,
-    reserved_15: u1,
+    pub autocalibration_mode: AutocalibrationMode,
+    pub prediction: Prediction,
+    pub angle_direction: AngleDirection,
+    pub angle_range: u11, // divide by 128 to get divider value
+    pub reserved_15: u1,
 }
 
 #[bitsize(2)]
