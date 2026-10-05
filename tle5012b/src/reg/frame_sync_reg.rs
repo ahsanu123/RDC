@@ -43,6 +43,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait FrameSyncRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

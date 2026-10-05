@@ -3,7 +3,8 @@ use bitflags::bitflags;
 use embedded_hal::spi::SpiDevice;
 
 use crate::{
-    communication::possible_address::PossibleAddress, device::DeviceTrait,
+    communication::possible_address::PossibleAddress,
+    device::{DeviceError, DeviceInner, DeviceTrait},
     reg::prelude::RegisterFromRaw,
 };
 
@@ -39,8 +40,10 @@ where
     SPI: SpiDevice,
     DEVICE: DeviceTrait<SPI>,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<StatusRegisterStructure, SPI::Error>;
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), SPI::Error>;
+    fn get_status(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<StatusRegisterStructure, DeviceError<SPI::Error>>;
 }
 
 impl<SPI, DEVICE> StatusRegisterHandler<SPI, DEVICE> for StatusRegister
@@ -48,16 +51,15 @@ where
     SPI: SpiDevice,
     DEVICE: DeviceTrait<SPI>,
 {
-    fn read_status(&mut self, dev: &mut DEVICE) -> Result<StatusRegisterStructure, SPI::Error> {
-        // let data = dev.read(PossibleAddress::StatusRegister)?;
-        // let status = StatusRegisterStructure::from(u16::new((data >> 16) as u16));
+    fn get_status(
+        &mut self,
+        dev: &mut DEVICE,
+    ) -> Result<StatusRegisterStructure, DeviceError<SPI::Error>> {
+        let raw_val = dev.read(PossibleAddress::StatusRegister)?;
+        let raw_val = (raw_val >> 16) as u16;
 
-        // Ok(status)
-        todo!()
-    }
-
-    fn write_slave_number(&mut self, dev: &mut DEVICE, number: u2) -> Result<(), <SPI>::Error> {
-        todo!()
+        let parsed_val = StatusRegisterStructure::from(raw_val);
+        Ok(parsed_val)
     }
 }
 

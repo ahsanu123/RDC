@@ -40,6 +40,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait AngleValueRegisterHandler<SPI, DEVICE>
 where
     DEVICE: DeviceTrait<SPI>,

@@ -26,6 +26,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait OffsetYRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

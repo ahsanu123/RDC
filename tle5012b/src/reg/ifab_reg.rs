@@ -57,6 +57,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait IFABRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

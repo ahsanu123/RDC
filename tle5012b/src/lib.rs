@@ -7,7 +7,10 @@ pub mod models;
 pub(crate) mod reg;
 pub(crate) mod signed_conversion;
 
-use crate::{device::DeviceInner, reg::prelude::*};
+use crate::{
+    device::{DeviceInner, ErrorOccured},
+    reg::prelude::*,
+};
 
 pub struct TLE5012B<SPI>
 where
@@ -67,6 +70,19 @@ where
             temperature_sensor_raw_value_reg: TemperatureSensorRawValueRegister::default(),
             iif_counter_value_reg: IIFCounterValueRegister::default(),
             temperature_25_offset_value_reg: Temperature25OffsetValueRegister::default(),
+        }
+    }
+
+    pub fn get_error(&mut self) -> Option<StatusRegisterStructure> {
+        match self.inner.error_occured {
+            ErrorOccured::NoError => None,
+            ErrorOccured::Partial | ErrorOccured::Full => {
+                let stat_reg = self
+                    .status_reg
+                    .get_status(&mut self.inner)
+                    .expect("fail to read status register");
+                Some(stat_reg)
+            }
         }
     }
 }

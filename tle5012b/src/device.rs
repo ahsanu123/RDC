@@ -1,10 +1,8 @@
-mod angle_range_writer;
 mod angle_speed_reader;
 mod angval_reader;
 mod config_writer;
 
 pub mod prelude {
-    pub use super::angle_range_writer::*;
     pub use super::angle_speed_reader::*;
     pub use super::angval_reader::*;
     pub use super::config_writer::*;
@@ -20,6 +18,7 @@ use crate::{
     crc_table::does_crc_match,
     reg::prelude::RegisterFromRaw,
 };
+use bilge::arbitrary_int::u4;
 use embedded_hal::spi::{Error as SpiErr, Operation};
 
 #[allow(unused_macros)]
@@ -38,16 +37,21 @@ macro_rules! loge {
     };
 }
 
-const RW_DELAY: u32 = 180;
-const SYSTEM_ERROR_MASK: u16 = 0x4000;
-const INTERFACE_ERROR_MASK: u16 = 0x2000;
-const INVALID_ANGLE_ERROR_MASK: u16 = 0x1000;
+const MIN_RW_DELAY: u32 = 180;
+
+pub enum ErrorOccured {
+    NoError,
+    Partial,
+    Full,
+}
 
 pub struct DeviceInner<SPI>
 where
     SPI: embedded_hal::spi::SpiDevice,
 {
     spi: SPI,
+
+    pub error_occured: ErrorOccured,
 }
 
 impl<SPI> DeviceInner<SPI>
@@ -55,34 +59,45 @@ where
     SPI: embedded_hal::spi::SpiDevice,
 {
     pub fn new(spi: SPI) -> Self {
-        Self { spi }
-    }
-}
-
-fn inspect_safety<const DATA_LENGTH: usize>(
-    message: &[u8; DATA_LENGTH],
-    raw_safety_word: u16,
-) -> SafetyWord {
-    if raw_safety_word & SYSTEM_ERROR_MASK == 0 {
-        loge!("system error in safety word");
-    }
-    if raw_safety_word & INTERFACE_ERROR_MASK == 0 {
-        loge!("interface access error in safety word");
-    }
-    if raw_safety_word & INVALID_ANGLE_ERROR_MASK == 0 {
-        loge!("invalid angle in safety word");
+        Self {
+            spi,
+            error_occured: ErrorOccured::NoError,
+        }
     }
 
-    let crc = does_crc_match(message, raw_safety_word);
-    if !crc.is_value_match {
-        loge!(
-            "crc not match, expected {}, got {}",
-            crc.expected_value,
-            crc.real_value
-        );
-    }
+    fn check_safety_word<const DATA_LENGTH: usize>(
+        &mut self,
+        message: &[u8; DATA_LENGTH],
+        raw_safety_word: u16,
+    ) -> SafetyWord {
+        let safetyword = SafetyWord::from(raw_safety_word);
 
-    SafetyWord::from(raw_safety_word)
+        let response = safetyword.response();
+        if response != u4::new(0b1111) {
+            loge!(
+                "someting is error, please check STAT register address 0x00, response value: {}",
+                u8::from(response)
+            );
+            self.error_occured = ErrorOccured::Full;
+        } else if response != u4::new(0b0000) {
+            logi!("no error, response value: {}", u8::from(response));
+            self.error_occured = ErrorOccured::Partial;
+        } else {
+            self.error_occured = ErrorOccured::NoError;
+        }
+
+        let crc = does_crc_match(message, raw_safety_word);
+
+        if !crc.is_value_match {
+            loge!(
+                "crc not match, expected {}, got {}",
+                crc.expected_value,
+                crc.real_value
+            );
+        }
+
+        safetyword
+    }
 }
 
 #[derive(Debug)]
@@ -125,7 +140,7 @@ where
         self.spi
             .transaction(&mut [
                 Operation::Write(&raw_command),
-                Operation::DelayNs(RW_DELAY),
+                Operation::DelayNs(MIN_RW_DELAY),
                 Operation::Read(&mut buffer),
             ])
             .map_err(DeviceError::SpiError)?;
@@ -133,7 +148,8 @@ where
         let data = u16::from_be_bytes([buffer[0], buffer[1]]);
         let raw_safety_word = u16::from_be_bytes([buffer[2], buffer[3]]);
         let crc_message = [raw_command[0], raw_command[1], buffer[0], buffer[1]];
-        inspect_safety(&crc_message, raw_safety_word);
+
+        let _safety_word = self.check_safety_word(&crc_message, raw_safety_word);
 
         let result = ((data as u32) << 16) | raw_safety_word as u32;
         logi!("read result{}", result);
@@ -153,13 +169,13 @@ where
         self.spi
             .transaction(&mut [
                 Operation::Write(&raw_command),
-                Operation::DelayNs(RW_DELAY),
+                Operation::DelayNs(MIN_RW_DELAY),
                 Operation::Read(&mut buffer),
             ])
             .map_err(DeviceError::SpiError)?;
 
         let raw_safety_word = u16::from_be_bytes(buffer);
-        let safety_word = inspect_safety(&raw_command, raw_safety_word);
+        let safety_word = self.check_safety_word(&raw_command, raw_safety_word);
         logi!("write result{}", raw_safety_word);
 
         Ok(safety_word)
@@ -237,7 +253,7 @@ mod tests {
                     Operation::Read(read),
                 ] => {
                     assert_eq!(*write, expected.write.as_slice());
-                    assert_eq!(*delay, RW_DELAY);
+                    assert_eq!(*delay, MIN_RW_DELAY);
                     assert_eq!(read.len(), expected.response.len());
                     read.copy_from_slice(&expected.response);
                 }
@@ -256,7 +272,7 @@ mod tests {
         response
     }
 
-    fn tle5012b_test() {
+    fn _tle5012b_test() {
         let mut ic = TLE5012B::new(MockSpi::new(Vec::from([])));
 
         let _angle_val = ic.read_angle_value().unwrap();

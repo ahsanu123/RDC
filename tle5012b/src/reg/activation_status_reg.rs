@@ -98,6 +98,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait ActivationStatusRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

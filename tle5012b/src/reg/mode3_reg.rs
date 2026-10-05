@@ -53,6 +53,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait Mode3RegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

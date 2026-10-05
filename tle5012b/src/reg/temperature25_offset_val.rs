@@ -27,6 +27,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait Temperature25OffsetValueRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

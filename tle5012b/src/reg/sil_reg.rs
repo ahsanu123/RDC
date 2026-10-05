@@ -76,6 +76,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait SILRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

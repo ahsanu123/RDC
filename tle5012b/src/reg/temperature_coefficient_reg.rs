@@ -42,6 +42,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait TemperatureCoefficientRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

@@ -30,6 +30,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait AngleVectorMagnitudeRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

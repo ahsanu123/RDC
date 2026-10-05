@@ -31,6 +31,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait SynchronicityRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

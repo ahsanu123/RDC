@@ -33,6 +33,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait IIFCounterValueRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

@@ -25,9 +25,9 @@ use bilge::prelude::*;
 #[derive(FromBits)]
 // LSB first
 pub struct SafetyWord {
-    crc: u8,
-    response: u4,
-    chip_status: ChipStatus,
+    pub crc: u8,
+    pub response: u4,
+    pub chip_status: ChipStatus,
 }
 
 #[bitsize(4)]

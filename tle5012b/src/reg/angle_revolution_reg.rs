@@ -45,6 +45,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait AngleRevolutionRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,

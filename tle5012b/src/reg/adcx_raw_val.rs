@@ -27,6 +27,7 @@ bitflags! {
     }
 }
 
+#[allow(unused)]
 pub trait ADCXRawValueRegisterHandler<SPI, DEVICE>
 where
     SPI: embedded_hal::spi::SpiDevice,
