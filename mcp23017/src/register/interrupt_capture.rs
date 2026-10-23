@@ -1,9 +1,10 @@
 use bilge::prelude::*;
 
-/// GPPU: true enables the weak pull-up on an input.
+/// INTCAP: port state latched at interrupt time; reading clears that port's interrupt.
+/// Datasheet: DS20001952C, section 3.5.9, Interrupt Captured Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
-pub struct Gppu {
+pub struct InterruptCapture {
     pub pin0: bool,
     pub pin1: bool,
     pub pin2: bool,
@@ -14,5 +15,4 @@ pub struct Gppu {
     pub pin7: bool,
 }
 
-super::register!(Gppu, 0x0c, 0x00);
-impl super::WritableRegister for Gppu {}
+super::register!(InterruptCapture, 0x10, 0x00);

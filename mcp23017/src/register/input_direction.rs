@@ -9,9 +9,10 @@ pub enum Direction {
 }
 
 /// IODIR: one direction bit per pin.
+/// Datasheet: DS20001952C, section 3.5.1, I/O Direction Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
-pub struct Iodir {
+pub struct InputDirection {
     pub pin0: Direction,
     pub pin1: Direction,
     pub pin2: Direction,
@@ -22,5 +23,5 @@ pub struct Iodir {
     pub pin7: Direction,
 }
 
-super::register!(Iodir, 0x00, 0xff);
-impl super::WritableRegister for Iodir {}
+super::register!(InputDirection, 0x00, 0xff);
+impl super::WritableRegister for InputDirection {}

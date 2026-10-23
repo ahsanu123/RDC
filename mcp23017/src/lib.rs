@@ -1,5 +1,12 @@
 #![no_std]
+#![doc = include_str!("../README.md")]
 
-//! Typed embedded-hal driver for Microchip's MCP23017 and MCP23S17 expanders.
-
+pub mod builder;
+pub mod comproc;
+mod device;
+mod function;
 pub mod register;
+
+pub use bilge::prelude::u3;
+pub use device::{Error, MCP23S17, MCP23017};
+pub use register::{Direction, Pin, Port};

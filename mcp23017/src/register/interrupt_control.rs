@@ -1,9 +1,10 @@
 use bilge::prelude::*;
 
 /// INTCON: true compares against DEFVAL, false against the previous input.
+/// Datasheet: DS20001952C, section 3.5.5, Interrupt Control Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
-pub struct Intcon {
+pub struct InterruptControl {
     pub pin0: bool,
     pub pin1: bool,
     pub pin2: bool,
@@ -14,5 +15,5 @@ pub struct Intcon {
     pub pin7: bool,
 }
 
-super::register!(Intcon, 0x08, 0x00);
-impl super::WritableRegister for Intcon {}
+super::register!(InterruptControl, 0x08, 0x00);
+impl super::WritableRegister for InterruptControl {}

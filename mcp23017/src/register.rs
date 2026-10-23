@@ -2,29 +2,29 @@
 
 use bilge::prelude::*;
 
-pub mod defval;
-pub mod gpinten;
-pub mod gpio;
-pub mod gppu;
-pub mod intcap;
-pub mod intcon;
-pub mod intf;
-pub mod iocon;
-pub mod iodir;
-pub mod ipol;
-pub mod olat;
+pub mod configuration;
+pub mod general_purpose_input_output;
+pub mod input_direction;
+pub mod input_polarity;
+pub mod interrupt_capture;
+pub mod interrupt_control;
+pub mod interrupt_default_value;
+pub mod interrupt_enable;
+pub mod interrupt_flags;
+pub mod output_latch;
+pub mod pull_up_resistors;
 
-pub use defval::Defval;
-pub use gpinten::Gpinten;
-pub use gpio::Gpio;
-pub use gppu::Gppu;
-pub use intcap::Intcap;
-pub use intcon::Intcon;
-pub use intf::Intf;
-pub use iocon::Iocon;
-pub use iodir::{Direction, Iodir};
-pub use ipol::Ipol;
-pub use olat::Olat;
+pub use configuration::Configuration;
+pub use general_purpose_input_output::GeneralPurposeInputOutput;
+pub use input_direction::{Direction, InputDirection};
+pub use input_polarity::InputPolarity;
+pub use interrupt_capture::InterruptCapture;
+pub use interrupt_control::InterruptControl;
+pub use interrupt_default_value::InterruptDefaultValue;
+pub use interrupt_enable::InterruptEnable;
+pub use interrupt_flags::InterruptFlags;
+pub use output_latch::OutputLatch;
+pub use pull_up_resistors::PullUpResistors;
 
 /// One of the two eight-bit ports.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -71,9 +71,9 @@ pub trait Register: sealed::Sealed + From<u8> + Into<u8> + Copy {
 /// A writable register, excluding IOCON which requires invariant checks.
 ///
 /// ```compile_fail
-/// use mcp23017::register::{Intf, WritableRegister};
+/// use mcp23017::register::{InterruptFlags, WritableRegister};
 /// fn writable<R: WritableRegister>() {}
-/// writable::<Intf>();
+/// writable::<InterruptFlags>();
 /// ```
 pub trait WritableRegister: Register {}
 

@@ -1,9 +1,10 @@
 use bilge::prelude::*;
 
-/// INTCAP: port state latched at interrupt time; reading clears that port's interrupt.
+/// IPOL: true inverts the corresponding input in GPIO reads.
+/// Datasheet: DS20001952C, section 3.5.2, Input Polarity Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
-pub struct Intcap {
+pub struct InputPolarity {
     pub pin0: bool,
     pub pin1: bool,
     pub pin2: bool,
@@ -14,4 +15,5 @@ pub struct Intcap {
     pub pin7: bool,
 }
 
-super::register!(Intcap, 0x10, 0x00);
+super::register!(InputPolarity, 0x02, 0x00);
+impl super::WritableRegister for InputPolarity {}

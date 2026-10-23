@@ -1,9 +1,10 @@
 use bilge::prelude::*;
 
 /// DEFVAL: comparison levels for interrupts when INTCON is set.
+/// Datasheet: DS20001952C, section 3.5.4, Default Compare Register for Interrupt-on-Change.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
-pub struct Defval {
+pub struct InterruptDefaultValue {
     pub pin0: bool,
     pub pin1: bool,
     pub pin2: bool,
@@ -14,5 +15,5 @@ pub struct Defval {
     pub pin7: bool,
 }
 
-super::register!(Defval, 0x06, 0x00);
-impl super::WritableRegister for Defval {}
+super::register!(InterruptDefaultValue, 0x06, 0x00);
+impl super::WritableRegister for InterruptDefaultValue {}

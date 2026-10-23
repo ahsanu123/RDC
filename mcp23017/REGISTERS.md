@@ -3,8 +3,22 @@
 Source: Microchip [DS20001952C](https://ww1.microchip.com/downloads/en/DeviceDoc/20001952C.pdf),
 sections 3.4-3.6. The driver uses **BANK=0** exclusively. All registers are eight
 bits; pin fields are ordered pin0 (LSB) through pin7 (MSB). A and B share the same
-Rust type but are selected with `Port`. `Iocon` is one global register with two
+Rust type but are selected with `Port`. `Configuration` is one global register with two
 aliases. This table lists all 22 addresses, not just writable registers.
+
+| Datasheet name | Descriptive Rust type | Datasheet section |
+|---|---|---|
+| IODIR | `InputDirection` | 3.5.1 |
+| IPOL | `InputPolarity` | 3.5.2 |
+| GPINTEN | `InterruptEnable` | 3.5.3 |
+| DEFVAL | `InterruptDefaultValue` | 3.5.4 |
+| INTCON | `InterruptControl` | 3.5.5 |
+| IOCON | `Configuration` | 3.5.6 |
+| GPPU | `PullUpResistors` | 3.5.7 |
+| INTF | `InterruptFlags` | 3.5.8 |
+| INTCAP | `InterruptCapture` | 3.5.9 |
+| GPIO | `GeneralPurposeInputOutput` | 3.5.10 |
+| OLAT | `OutputLatch` | 3.5.11 |
 
 | Register | BANK=0 A / B | BANK=1 A / B (reference only) | Access | Reset | Fields and read requirements / side effects |
 |---|---|---|---|---|---|
@@ -24,17 +38,17 @@ aliases. This table lists all 22 addresses, not just writable registers.
 
 | Bit | Typed field | Meaning |
 |---|---|---|
-| 7 | `bank` | 0=interleaved map; 1=separate banks (rejected by driver). |
+| 7 | `separate_register_banks` | 0=interleaved map; 1=separate banks (rejected by driver). |
 | 6 | `mirror_interrupts` | OR both interrupt sources onto both INT pins. |
 | 5 | `sequential_operation_disabled` | Disable address auto-increment. Both settings work with single-byte transfers. |
 | 4 | `slew_rate_disabled` | Disable I2C SDA slew-rate control. |
 | 3 | `hardware_address_enable` | Enable SPI address pins. Must remain enabled on MCP23S17; not applicable to MCP23017, whose address pins are always enabled. |
 | 2 | `interrupt_open_drain` | Open-drain INT outputs; overrides polarity. |
 | 1 | `interrupt_active_high` | Active-high push-pull INT outputs when open-drain is disabled. |
-| 0 | `reserved` | Unimplemented, reads zero. Driver rejects writes of one. |
+| 0 | `unimplemented_bit` | Unimplemented, reads zero. Driver rejects writes of one. |
 
-All types are bilge bitfields; `Iodir` resets to 0xFF and all other register types
-reset to 0x00. `Intf` and `Intcap` cannot be written. `Iocon` is writable only
+All types are bilge bitfields; `InputDirection` resets to 0xFF and all other register types
+reset to 0x00. `InterruptFlags` and `InterruptCapture` cannot be written. `Configuration` is writable only
 through `write_configuration`, which checks BANK, reserved bits and SPI HAEN.
 No driver method changes BANK. A hardware reset/power-on and exclusive ownership
 of the register configuration are prerequisites; there is no software reset.

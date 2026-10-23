@@ -1,9 +1,10 @@
 use bilge::prelude::*;
 
 /// INTF: interrupt-source flags. Reading does not clear the interrupt.
+/// Datasheet: DS20001952C, section 3.5.8, Interrupt Flag Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
-pub struct Intf {
+pub struct InterruptFlags {
     pub pin0: bool,
     pub pin1: bool,
     pub pin2: bool,
@@ -14,4 +15,4 @@ pub struct Intf {
     pub pin7: bool,
 }
 
-super::register!(Intf, 0x0e, 0x00);
+super::register!(InterruptFlags, 0x0e, 0x00);
