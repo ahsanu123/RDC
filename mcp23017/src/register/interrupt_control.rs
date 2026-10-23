@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 /// INTCON: true compares against DEFVAL, false against the previous input.
-/// Datasheet: DS20001952C, section 3.5.5, Interrupt Control Register.
+/// Datasheet: DS20001952D, section 3.5.5, Interrupt Control Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct InterruptControl {

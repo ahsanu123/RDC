@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 /// IOCON: global configuration, mirrored at the port A and B addresses.
-/// Datasheet: DS20001952C, section 3.5.6, Configuration Register.
+/// Datasheet: DS20001952D, section 3.5.6, Configuration Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct Configuration {

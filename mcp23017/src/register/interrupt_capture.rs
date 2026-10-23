@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 /// INTCAP: port state latched at interrupt time; reading clears that port's interrupt.
-/// Datasheet: DS20001952C, section 3.5.9, Interrupt Captured Register.
+/// Datasheet: DS20001952D, section 3.5.9, Interrupt Captured Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct InterruptCapture {

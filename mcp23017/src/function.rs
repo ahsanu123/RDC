@@ -1,7 +1,7 @@
 use crate::register::{GeneralPurposeInputOutput, InterruptCapture, InterruptFlags, OutputLatch};
 
 /// Pure conversions of typed register read results; device methods own bus I/O.
-/// Datasheet: DS20001952C, sections 3.5.8-3.5.11, per-port flags, capture, GPIO and latches.
+/// Datasheet: DS20001952D, sections 3.5.8-3.5.11, per-port flags, capture, GPIO and latches.
 #[derive(Default)]
 pub(crate) struct PortValues;
 

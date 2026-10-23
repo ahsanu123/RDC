@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 /// IPOL: true inverts the corresponding input in GPIO reads.
-/// Datasheet: DS20001952C, section 3.5.2, Input Polarity Register.
+/// Datasheet: DS20001952D, section 3.5.2, Input Polarity Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct InputPolarity {

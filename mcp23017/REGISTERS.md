@@ -1,10 +1,15 @@
 # MCP23017 / MCP23S17 registers
 
-Source: Microchip [DS20001952C](https://ww1.microchip.com/downloads/en/DeviceDoc/20001952C.pdf),
+Source: Microchip [DS20001952D](https://ww1.microchip.com/downloads/aemDocuments/documents/APID/ProductDocuments/DataSheets/MCP23017-Data-Sheet-DS20001952.pdf),
 sections 3.4-3.6. The driver uses **BANK=0** exclusively. All registers are eight
 bits; pin fields are ordered pin0 (LSB) through pin7 (MSB). A and B share the same
 Rust type but are selected with `Port`. `Configuration` is one global register with two
 aliases. This table lists all 22 addresses, not just writable registers.
+
+Revision D specifies that **MCP23017 GPA7/GPB7 are output-only**, despite their
+input-direction reset bits. Do not attach input signals to those pins. This
+restriction does not apply to the SPI MCP23S17. Raw register access exposes the
+actual register layout and does not hide those bits.
 
 | Datasheet name | Descriptive Rust type | Datasheet section |
 |---|---|---|

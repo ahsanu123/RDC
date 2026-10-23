@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 /// DEFVAL: comparison levels for interrupts when INTCON is set.
-/// Datasheet: DS20001952C, section 3.5.4, Default Compare Register for Interrupt-on-Change.
+/// Datasheet: DS20001952D, section 3.5.4, Default Compare Register for Interrupt-on-Change.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct InterruptDefaultValue {

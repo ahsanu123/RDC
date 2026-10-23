@@ -24,6 +24,7 @@ mod sealed {
 pub trait Interface: sealed::Sealed {
     type Error;
     const REQUIRES_HAEN: bool;
+    const SUPPORTS_PIN7_INPUT: bool;
 
     /// Prepare a device in its power-on register map.
     fn initialize(&mut self) -> Result<(), Self::Error>;
@@ -32,7 +33,7 @@ pub trait Interface: sealed::Sealed {
 }
 
 /// MCP23017 I2C transport; address is 0x20 plus the three address-pin levels.
-/// Datasheet: DS20001952C, sections 3.2.2 and 3.3.1, I2C interface and addressing.
+/// Datasheet: DS20001952D, sections 3.2.2 and 3.3.1, I2C interface and addressing.
 pub struct I2cInterface<I2C> {
     bus: I2C,
     address: u8,
@@ -56,6 +57,7 @@ impl<I2C> sealed::Sealed for I2cInterface<I2C> {}
 impl<I2C: I2c> Interface for I2cInterface<I2C> {
     type Error = I2C::Error;
     const REQUIRES_HAEN: bool = false;
+    const SUPPORTS_PIN7_INPUT: bool = false;
 
     fn initialize(&mut self) -> Result<(), Self::Error> {
         Ok(())
@@ -73,7 +75,7 @@ impl<I2C: I2c> Interface for I2cInterface<I2C> {
 }
 
 /// MCP23S17 SPI transport. `SpiDevice` keeps CS asserted for the entire read.
-/// Datasheet: DS20001952C, sections 3.2.3 and 3.3.2; erratum DS80311A, issue 1.
+/// Datasheet: DS20001952D, sections 3.2.3 and 3.3.2; erratum DS80311A, issue 1.
 pub struct SpiInterface<SPI> {
     bus: SPI,
     opcode: u8,
@@ -97,6 +99,7 @@ impl<SPI> sealed::Sealed for SpiInterface<SPI> {}
 impl<SPI: SpiDevice<u8>> Interface for SpiInterface<SPI> {
     type Error = SPI::Error;
     const REQUIRES_HAEN: bool = true;
+    const SUPPORTS_PIN7_INPUT: bool = true;
 
     fn initialize(&mut self) -> Result<(), Self::Error> {
         // DS80311A: reset silicon with A2 high requires an opcode with A2 set.

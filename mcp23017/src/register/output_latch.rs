@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 /// OLAT: output latches, independent of the actual input levels.
-/// Datasheet: DS20001952C, section 3.5.11, Output Latch Register.
+/// Datasheet: DS20001952D, section 3.5.11, Output Latch Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct OutputLatch {

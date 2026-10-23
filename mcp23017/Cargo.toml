@@ -16,4 +16,5 @@ embedded-hal = "1.0.0"
 typed-builder = "0.23.2"
 
 [dev-dependencies]
+defmt = { version = "1.2.0", features = ["unstable-test"] }
 embedded-hal-mock = { version = "0.11.1", default-features = false, features = ["eh1"] }

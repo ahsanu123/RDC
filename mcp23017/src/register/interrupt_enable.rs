@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 /// GPINTEN: true enables interrupt-on-change for an input.
-/// Datasheet: DS20001952C, section 3.5.3, Interrupt-on-Change Control Register.
+/// Datasheet: DS20001952D, section 3.5.3, Interrupt-on-Change Control Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct InterruptEnable {

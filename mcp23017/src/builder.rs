@@ -11,7 +11,7 @@ use crate::{
 ///
 /// The interface type selects I2C or SPI at compile time; each interface owns
 /// its bus and three-bit hardware address. See the README for an example.
-/// Datasheet: DS20001952C, sections 3.2-3.3, Serial Interface and Hardware Address.
+/// Datasheet: DS20001952D, sections 3.2-3.3, Serial Interface and Hardware Address.
 #[derive(TypedBuilder)]
 pub struct Builder<I> {
     interface: I,

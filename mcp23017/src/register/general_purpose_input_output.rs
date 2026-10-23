@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 /// GPIO: pin levels on read, output latch on write. Reads clear the port interrupt.
-/// Datasheet: DS20001952C, section 3.5.10, Port Register.
+/// Datasheet: DS20001952D, section 3.5.10, Port Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct GeneralPurposeInputOutput {

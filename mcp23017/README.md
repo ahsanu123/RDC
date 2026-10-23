@@ -17,7 +17,7 @@ fn example<I: I2c>(i2c: I) -> Result<(), Error<I::Error>> {
     let mut device = MCP23017::new_i2c(i2c, u3::new(0))?;
     device.set_output(Port::A, Pin::P0, true)?;
     device.set_direction(Port::A, Pin::P0, Direction::Output)?;
-    device.set_pull_up(Port::B, Pin::P7, true)?;
+    device.set_pull_up(Port::B, Pin::P6, true)?;
     let _levels = device.read_ports()?;
     let _i2c = device.release().release();
     Ok(())
@@ -70,6 +70,10 @@ addresses. `Pin` restricts pin indices to 0-7 within the selected `Port`.
 
 ## Hardware and ownership requirements
 
+- DS20001952D specifies **GPA7 and GPB7 are output-only on MCP23017**.
+  Use only pins 0-6 on each port for inputs, pull-ups and interrupt sources.
+  `set_direction` rejects `Input` for these two pins. Raw typed-register writes
+  remain low-level and must respect this restriction. MCP23S17 has no such limit.
 - Start after hardware reset/power-on, with BANK=0; no software reset exists.
   Constructors do not recover arbitrary pre-existing BANK=1 configurations.
   Do not reset or reconfigure the chip outside the driver while it is in use.
@@ -107,7 +111,7 @@ claimed.
 
 ## References
 
-- Microchip [MCP23017/MCP23S17 datasheet DS20001952C](https://ww1.microchip.com/downloads/en/DeviceDoc/20001952C.pdf),
+- Microchip [MCP23017/MCP23S17 datasheet DS20001952D](https://ww1.microchip.com/downloads/aemDocuments/documents/APID/ProductDocuments/DataSheets/MCP23017-Data-Sheet-DS20001952.pdf),
   especially sections 3.2-3.6.
 - Microchip [MCP23S17 revision A errata DS80311A](https://ww1.microchip.com/downloads/aemDocuments/documents/OTH/ProductDocuments/Errata/80311a.pdf).
 - Existing Rust [`mcp23017` driver](https://github.com/circuitry-maker/mcp23017)

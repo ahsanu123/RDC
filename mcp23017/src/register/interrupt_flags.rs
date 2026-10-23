@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 /// INTF: interrupt-source flags. Reading does not clear the interrupt.
-/// Datasheet: DS20001952C, section 3.5.8, Interrupt Flag Register.
+/// Datasheet: DS20001952D, section 3.5.8, Interrupt Flag Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct InterruptFlags {

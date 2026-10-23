@@ -9,7 +9,8 @@ pub enum Direction {
 }
 
 /// IODIR: one direction bit per pin.
-/// Datasheet: DS20001952C, section 3.5.1, I/O Direction Register.
+/// MCP23017 pins GPA7/GPB7 must only be used as outputs.
+/// Datasheet: DS20001952D, Features and section 3.5.1, I/O Direction Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct InputDirection {

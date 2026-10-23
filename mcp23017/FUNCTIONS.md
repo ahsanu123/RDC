@@ -31,7 +31,7 @@ clearing uses $R' = R \land (255 - M)$
 | `read_register<R>` | Read the selected port's typed register. | Known BANK=0. GPIO/INTCAP side effects apply. |
 | `write_register<R>` | Write the selected port's typed register. | Only writable types; INTF, INTCAP and IOCON are excluded. GPIO writes change OLAT. |
 | `write_configuration` | Validate and write IOCON at 0x0A. | Reject BANK=1, reserved bit=1, and HAEN=0 on SPI before any I/O. Read current IOCON and modify it to preserve unrelated settings. |
-| `set_direction` | Read-modify-write IODIR. | Input=1, output=0. Set desired OLAT before enabling output to avoid a transient level. |
+| `set_direction` | Read-modify-write IODIR. | Input=1, output=0. Reject Input on MCP23017 GPA7/GPB7 (DS20001952D). Set desired OLAT before enabling output to avoid a transient level. |
 | `set_pull_up` | Read-modify-write GPPU. | Pull-ups affect input pins. |
 | `set_input_inverted` | Read-modify-write IPOL. | Affects GPIO input reporting, not output latch contents. |
 | `set_interrupt_enabled` | Read-modify-write GPINTEN. | Configure input direction, DEFVAL/INTCON, pull-ups, IOCON before enabling. |

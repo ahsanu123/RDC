@@ -18,6 +18,8 @@ pub enum Error<E> {
     Bus(E),
     /// BANK=1, a reserved bit set, or HAEN disabled for SPI.
     InvalidConfiguration,
+    /// MCP23017 GPA7 and GPB7 are output-only (DS20001952D).
+    UnsupportedInputPin,
 }
 
 fn bus_error<E>(error: E) -> Error<E> {
@@ -31,7 +33,7 @@ fn bus_error<E>(error: E) -> Error<E> {
 /// Construction requires the power-on register map (`BANK=0`).
 /// Use [`MCP23S17`] for the SPI part. No register values are cached: a failed
 /// transaction cannot leave a software shadow disagreeing with hardware.
-/// Datasheet: DS20001952C, sections 3.1-3.6, device operation and register access.
+/// Datasheet: DS20001952D, sections 3.1-3.6, device operation and register access.
 pub struct MCP23017<I> {
     interface: I,
     functions: PortValues,
@@ -83,6 +85,8 @@ impl<I: Interface> MCP23017<I> {
     }
 
     /// Write a typed writable register. IOCON must use `write_configuration`.
+    /// Low-level writes do not check pin capabilities: on MCP23017, never use
+    /// GPA7/GPB7 as inputs even though their direction bits reset to one.
     pub fn write_register<R: WritableRegister>(
         &mut self,
         port: Port,
@@ -139,6 +143,11 @@ impl<I: Interface> MCP23017<I> {
         pin: Pin,
         direction: Direction,
     ) -> Result<(), Error<I::Error>> {
+        if !I::SUPPORTS_PIN7_INPUT && pin == Pin::P7 && direction == Direction::Input {
+            #[cfg(feature = "defmt")]
+            defmt::error!("MCP23017 pin 7 supports output only");
+            return Err(Error::UnsupportedInputPin);
+        }
         self.update_bit::<InputDirection>(port, pin, direction == Direction::Input)
     }
 

@@ -1,7 +1,7 @@
 use bilge::prelude::*;
 
 /// GPPU: true enables the weak pull-up on an input.
-/// Datasheet: DS20001952C, section 3.5.7, Pull-Up Resistor Configuration Register.
+/// Datasheet: DS20001952D, section 3.5.7, Pull-Up Resistor Configuration Register.
 #[bitsize(8)]
 #[derive(Clone, Copy, DebugBits, FromBits, PartialEq, Eq)]
 pub struct PullUpResistors {
