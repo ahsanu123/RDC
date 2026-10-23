@@ -66,7 +66,7 @@ Unlisted gaps in 00-3D are reserved, not readable registers in this API.
 |---|---|
 | Flags | 0 DSG, 1 SOCF, 2 SOC1, 3 BAT_DET, 4 CFGUPMODE, 5 ITPOR, 6 reserved, 7 OCVTAKEN, 8 CHG, 9 FC, 10-13 reserved (`u4`), 14 UT, 15 OT |
 | ControlStatus | 0 reserved, 1 VOK, 2 RUP_DIS, 3 LDMD, 4 SLEEP, 5 reserved, 6 HIBERNATE, 7 INITCOMP, 8 RES_UP, 9 QMAX_UP, 10 BCA, 11 CCA, 12 CALMODE, 13 SS, 14 WDRESET, 15 SHUTDOWNEN |
-| OperationConfiguration | 0 TEMPS, 1 reserved, 2 BI_PU_EN, 3 BIE, 4 BATLOWEN, 5-6 reserved (`u2`), 7 GPIOPOL, 8 SLEEP, 9-15 reserved (`u7`) |
+| OperationConfiguration | 0 TEMPS, 1 reserved=0, 2 BATLOWEN, 3 reserved=1, 4 RMFCC, 5 SLEEP, 6-8 reserved=1, 9 reserved=0, 10 reserved=1, 11 GPIOPOL, 12 BI_PU_EN, 13 BIE, 14-15 reserved=0 |
 | StateOfHealth | 0-7 percentage, 8-15 HealthStatus: 0 invalid, 1 instant, 2 initial/default Qmax, 3 learned Qmax, 4-255 reserved (preserved) |
 
 Reserved bits are retained by bilge `FromBits`. Generated setters alter only
@@ -159,3 +159,5 @@ preserving all other bytes. It rejects capacity outside 200-8000 mAh (datasheet
 supported range), energy outside 1-32767 mWh, terminate voltage outside
 2500-3700 mV and taper rate outside 1-2000. Raw page writes do not grant
 permission to modify ROM fields or reserved offsets.
+Page indices above the last documented page are rejected (`InvalidDataBlock`).
+SecurityCodes page writes are rejected (`ReadOnlyDataMemory`).
