@@ -76,6 +76,12 @@ pub trait ReadableRegister: Register {}
 /// fn writable<R: WritableRegister>() {}
 /// writable::<DriverStatus>();
 /// ```
+///
+/// ```compile_fail
+/// use tmc2209::register::{OtpProgramming, WritableRegister};
+/// fn ordinary_write<R: WritableRegister>() {}
+/// ordinary_write::<OtpProgramming>();
+/// ```
 pub trait WritableRegister: Register {
     const WRITE_MASK: u32;
 }

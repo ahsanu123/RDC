@@ -11,6 +11,10 @@ actual hardware access, not a software shadow. Reserved/unimplemented write bits
 must be zero. `None` in `Register::RESET` means live, OTP-dependent or unspecified;
 no blanket `Default` is invented for those registers.
 
+Section 5's reset rule is zero unless otherwise specified; live pin, status and
+measurement fields can immediately differ from that initial value. Those live
+words use `RESET=None` rather than pretending a synthesized zero is a hardware read.
+
 | Address | Datasheet | Rust struct | Access | Reset / read requirements and side effects |
 |---|---|---|---|---|
 | 0x00 | GCONF | `GeneralConfiguration` | R/W | OTP-dependent, analog scaling=1 and step filter=1. Ordinary read; TEST_MODE must remain zero. Read before modifying unrelated bits. |
