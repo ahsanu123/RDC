@@ -47,7 +47,8 @@ Periodic SET requires both continuous mode and auto S/R. Three-wire SPI requires
 half-duplex bus support not provided here and is rejected. Opposing test currents
 cannot be enabled simultaneously by this driver.
 
-Controls are changed only after disabling continuous mode. Writes are sequential,
+Controls are changed only after disabling continuous mode and waiting 10 ms for
+any in-flight measurement. Writes are sequential,
 not atomic. Successful writes update the shadow; any failed write invalidates
 initialization because the host cannot know whether the device accepted it.
 Reinitialize after a failed configuration/command write.
