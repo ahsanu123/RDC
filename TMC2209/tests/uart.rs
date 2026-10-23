@@ -260,6 +260,25 @@ fn test_direction_preserves_unrelated_general_fields() {
 }
 
 #[test]
+fn test_enable_chopper_mode_and_standstill_mode_preserve_other_fields() {
+    let mut expectations = identity();
+    read(&mut expectations, 0x6c, 0x1401_0050);
+    checked_write(&mut expectations, 0x6c, 0x1401_0051, 0);
+    read(&mut expectations, 0x00, 0x41);
+    checked_write(&mut expectations, 0x00, 0x45, 1);
+    read(&mut expectations, 0x70, 0xc10d_0024);
+    checked_write(&mut expectations, 0x70, 0xc11d_0024, 2);
+    let mut uart = Mock::new(&expectations);
+    let mut device = connected(&mut uart);
+    device.enable(u4::new(1)).unwrap();
+    device.set_spread_cycle(true).unwrap();
+    device
+        .set_standstill_mode(tmc2209::StandstillMode::Freewheeling)
+        .unwrap();
+    uart.done();
+}
+
+#[test]
 fn test_configure_uart_preserves_configuration_without_enabling_motor() {
     let mut expectations = identity();
     read(&mut expectations, 0x00, 0x81);
