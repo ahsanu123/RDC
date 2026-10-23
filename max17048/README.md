@@ -151,6 +151,9 @@ cargo build --manifest-path max17048/Cargo.toml --target thumbv7em-none-eabi --a
 
 Tests use `embedded-hal-mock` for exact framing, endian order, field/latch
 preservation, invalid arguments, interface errors, and multi-step failures.
+Verified with and without `defmt`: **8 conversion tests, 25 bus tests, and
+1 documentation test** pass; formatting, warning-denied Clippy/rustdoc, and
+`thumbv7em-none-eabi` builds pass in both feature configurations.
 **Hardware has not been tested.** Timing, battery-model accuracy, and electrical
 operation still require board-level validation.
 

@@ -3,6 +3,7 @@ use bilge::prelude::*;
 /// Dis field encodings, datasheet Rev. 7, figure 12.
 #[bitsize(1)]
 #[derive(Clone, Copy, Debug, FromBits, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ResetComparator {
     Enabled = 0,
     Disabled = 1,
