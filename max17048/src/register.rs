@@ -20,7 +20,7 @@ pub use configuration::Configuration;
 pub use hibernate_threshold::HibernateThreshold;
 pub use mode::Mode;
 pub use model::{ModelAccess, ModelTableWord};
-pub use reset_voltage::ResetVoltage;
+pub use reset_voltage::{ResetComparator, ResetVoltage};
 pub use state_of_charge::StateOfCharge;
 pub use status::Status;
 pub use version::Version;
@@ -40,3 +40,33 @@ macro_rules! readable {
     };
 }
 pub(crate) use readable;
+
+#[cfg(feature = "defmt")]
+macro_rules! format_registers {
+    ($($name:ident),* $(,)?) => {
+        $(
+            impl defmt::Format for $name {
+                fn format(&self, formatter: defmt::Formatter) {
+                    defmt::write!(formatter, "{}({=u16:#x})", stringify!($name), u16::from(*self));
+                }
+            }
+        )*
+    };
+}
+
+#[cfg(feature = "defmt")]
+format_registers!(
+    CellVoltage,
+    ChargeRate,
+    Command,
+    Configuration,
+    HibernateThreshold,
+    Mode,
+    ModelAccess,
+    ModelTableWord,
+    ResetVoltage,
+    StateOfCharge,
+    Status,
+    Version,
+    VoltageAlert,
+);
