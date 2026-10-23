@@ -2,10 +2,15 @@
 name = "max31865"
 version = "0.0.1"
 edition = "2024"
+description = "no_std embedded-hal MAX31865 RTD converter driver"
 
 [dependencies]
+bilge = "0.5.0"
 bitflags = "2.11.0"
+defmt = { version = "1.2.0", optional = true }
 embedded-hal = "1.0.0"
-embedded-hal-async = "1.0.0"
-embedded-hal-bus = "0.3.0"
-libm = "0.2.15"
+libm = "0.2.16"
+
+[features]
+default = []
+defmt = ["dep:defmt"]

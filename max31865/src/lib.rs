@@ -1,35 +1,41 @@
 #![no_std]
+#![doc = include_str!("../README.md")]
 
+mod comproc;
 pub mod error;
-
 mod fault_cycle;
+mod function;
 mod numwires;
-mod register;
-mod to_debug;
+pub mod register;
 mod traits;
 
-use embedded_hal::{
-    delay::DelayNs,
-    spi::{Operation, SpiDevice},
-};
+use embedded_hal::{delay::DelayNs, spi::SpiDevice};
+use error::{HardwareErr, Max31865Err};
+use function::{FaultEvaluation, RtdConversion};
+use register::{Address, Configuration, FaultStatus, FaultThreshold, MainsFilter, RtdResistance};
 
-use error::{Max31865Err, SpiErr};
-use fault_cycle::FaultCycle;
-use to_debug::ToDebugTrait;
-
+pub use fault_cycle::FaultCycle;
 pub use numwires::Numwires;
 pub use register::Register;
 pub use traits::{ReadTrait, WriteTrait};
 
-use crate::error::HardwareErr;
+const STARTUP_BIAS_DELAY_MS: u32 = 20;
+const ACQUISITION_BIAS_DELAY_MS: u32 = 10;
+const CONVERSION_60_HZ_DELAY_MS: u32 = 65;
+const CONVERSION_50_HZ_DELAY_MS: u32 = 66;
+const FAULT_CYCLE_DELAY_MS: u32 = 1;
 
+/// Temperature, ohms and normalized ratio from one RTD sample.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct DebugValue {
     pub temperature: f32,
     pub resistance: f32,
     pub ratio: f32,
 }
 
-// Max31865 is generic for SpiDevice and DelayNs trait
+/// MAX31865 RTD converter, owning SPI, delay and private processing state.
+/// Datasheet: 19-6478, Rev 3, pages 13-18.
 pub struct Max31865<SPI, Delay>
 where
     SPI: SpiDevice,
@@ -37,60 +43,48 @@ where
 {
     spi: SPI,
     delay: Delay,
-    ref_resistor: f32,
-    rtd_nominal: f32,
+    rtd_conversion: RtdConversion,
+    fault_evaluation: FaultEvaluation,
 }
 
-impl<SPI, Delay> WriteTrait for Max31865<SPI, Delay>
-where
-    SPI: SpiDevice,
-    Delay: DelayNs,
-{
-    fn write_u8(&mut self, address: Register, data: u8) -> Result<(), Max31865Err> {
-        let address = address.bits() | 0x80;
-        self.spi
-            .write(&[address, data])
-            .map_err(|_| Max31865Err::Spi(SpiErr::FailToWrite))
+impl<SPI: SpiDevice, Delay: DelayNs> WriteTrait for Max31865<SPI, Delay> {
+    type InterfaceError = SPI::Error;
+
+    fn write_u8(&mut self, address: Register, data: u8) -> Result<(), Max31865Err<SPI::Error>> {
+        comproc::write(&mut self.spi, address.bits(), data)
     }
 }
 
-impl<SPI, Delay> ReadTrait for Max31865<SPI, Delay>
-where
-    SPI: SpiDevice,
-    Delay: DelayNs,
-{
-    fn read_u16(&mut self, address: Register) -> Result<u16, Max31865Err> {
-        let mut buffer: [u8; 2] = [0; 2];
-        self.read_n::<2>(address, &mut buffer)?;
+impl<SPI: SpiDevice, Delay: DelayNs> ReadTrait for Max31865<SPI, Delay> {
+    type InterfaceError = SPI::Error;
 
-        Ok(u16::from_be_bytes(buffer))
+    fn read_u16(&mut self, address: Register) -> Result<u16, Max31865Err<SPI::Error>> {
+        let mut bytes = [0; 2];
+        self.read_n(address, &mut bytes)?;
+        Ok(u16::from_be_bytes(bytes))
     }
 
-    fn read_u8(&mut self, address: Register) -> Result<u8, Max31865Err> {
-        let mut buffer: [u8; 1] = [0; 1];
-        self.read_n::<1>(address, &mut buffer)?;
-
-        Ok(buffer[0])
+    fn read_u8(&mut self, address: Register) -> Result<u8, Max31865Err<SPI::Error>> {
+        let mut bytes = [0];
+        self.read_n(address, &mut bytes)?;
+        Ok(bytes[0])
     }
 
     fn read_n<const N: usize>(
         &mut self,
         address: Register,
         buffer: &mut [u8; N],
-    ) -> Result<(), Max31865Err> {
-        let address = address.bits() & 0x7F;
-
-        self.spi
-            .transaction(&mut [Operation::Write(&[address]), Operation::Read(buffer)])
-            .map_err(|_| Max31865Err::Spi(SpiErr::FailToRead))
+    ) -> Result<(), Max31865Err<SPI::Error>> {
+        comproc::read(&mut self.spi, address.bits(), buffer)
     }
 }
 
-impl<SPI, Delay> Max31865<SPI, Delay>
-where
-    SPI: SpiDevice,
-    Delay: DelayNs,
-{
+impl<SPI: SpiDevice, Delay: DelayNs> Max31865<SPI, Delay> {
+    /// Legacy constructor, retaining its panic-on-initialization-failure contract.
+    ///
+    /// # Panics
+    /// Panics on invalid resistor values or initialization I/O failure.
+    #[deprecated(note = "use try_new to receive initialization errors instead of panicking")]
     pub fn new(
         spi: SPI,
         delay: Delay,
@@ -98,271 +92,223 @@ where
         rtd_nominal: f32,
         ref_resistor: f32,
     ) -> Self {
+        Self::try_new(spi, delay, wire, rtd_nominal, ref_resistor)
+            .expect("MAX31865 initialization failed")
+    }
+
+    /// Fallible initialization preserving the existing successful startup sequence.
+    ///
+    /// Sets wires, enables bias, waits 20 ms, enables automatic conversions,
+    /// sets raw thresholds to 0000/FFFF and clears latched faults.
+    pub fn try_new(
+        spi: SPI,
+        delay: Delay,
+        wire: Numwires,
+        rtd_nominal: f32,
+        ref_resistor: f32,
+    ) -> Result<Self, Max31865Err<SPI::Error>> {
+        if !rtd_nominal.is_finite() || rtd_nominal <= 0.0 {
+            return Err(Max31865Err::InvalidNominalResistance);
+        }
+        if !ref_resistor.is_finite() || ref_resistor <= 0.0 {
+            return Err(Max31865Err::InvalidReferenceResistance);
+        }
         let mut instance = Self {
             spi,
             delay,
-            rtd_nominal,
-            ref_resistor,
+            rtd_conversion: RtdConversion {
+                reference_resistor: ref_resistor,
+                nominal_resistance: rtd_nominal,
+            },
+            fault_evaluation: FaultEvaluation,
         };
-
-        instance.set_wires(wire).to_debug();
-        instance.enable_bias(true).to_debug();
-        instance.delay.delay_ms(20);
-        instance.auto_convert(true).to_debug();
-        instance.set_threshold(0, 0xFFFF).to_debug();
-        instance.clear_fault().to_debug();
-
-        instance
+        instance.set_wires(wire)?;
+        instance.enable_bias(true)?;
+        instance.delay.delay_ms(STARTUP_BIAS_DELAY_MS);
+        instance.auto_convert(true)?;
+        instance.set_threshold(0, 0xffff)?;
+        instance.clear_fault()?;
+        #[cfg(feature = "defmt")]
+        defmt::debug!("MAX31865 initialized");
+        Ok(instance)
     }
 
-    pub fn clear_fault(&mut self) -> Result<(), Max31865Err> {
-        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
-
-        value.remove(Register::CONFIG_1SHOT | Register::CONFIG_FAULT_DETECTION_CYCLE_CONTROL);
-        value |= Register::CONFIG_FAULTSTAT;
-
-        self.write_u8(Register::CONFIG_REG, value.bits())
-            .expect("fail to clear_fault");
-
-        Ok(())
+    /// Return owned resources without changing hardware configuration.
+    pub fn release(self) -> (SPI, Delay) {
+        (self.spi, self.delay)
     }
 
-    pub fn enable_bias(&mut self, enable: bool) -> Result<(), Max31865Err> {
-        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
-        if enable {
-            value.insert(Register::CONFIG_BIAS);
-        } else {
-            value.remove(Register::CONFIG_BIAS);
-        }
-
-        self.write_u8(Register::CONFIG_REG, value.into())
-            .expect("fail to enable_bias");
-
-        Ok(())
+    pub fn read_configuration(&mut self) -> Result<Configuration, Max31865Err<SPI::Error>> {
+        self.read_u8(Address::Configuration.into()).map(Into::into)
     }
 
-    pub fn read_fault(&mut self, cycle: FaultCycle) -> Result<(), Max31865Err> {
+    /// Raw completed output; reading the pair acknowledges DRDY.
+    pub fn read_resistance_register(&mut self) -> Result<RtdResistance, Max31865Err<SPI::Error>> {
+        self.read_u16(Address::RtdResistanceMostSignificant.into())
+            .map(Into::into)
+    }
+
+    /// Read latched faults without clearing them or initiating a detection cycle.
+    pub fn read_fault_status(&mut self) -> Result<FaultStatus, Max31865Err<SPI::Error>> {
+        self.read_u8(Address::FaultStatus.into()).map(Into::into)
+    }
+
+    pub fn read_lower_threshold(&mut self) -> Result<FaultThreshold, Max31865Err<SPI::Error>> {
+        self.read_u16(Address::LowFaultThresholdMostSignificant.into())
+            .map(Into::into)
+    }
+
+    pub fn read_upper_threshold(&mut self) -> Result<FaultThreshold, Max31865Err<SPI::Error>> {
+        self.read_u16(Address::HighFaultThresholdMostSignificant.into())
+            .map(Into::into)
+    }
+
+    pub fn clear_fault(&mut self) -> Result<(), Max31865Err<SPI::Error>> {
+        let mut configuration = self.read_configuration()?.stable();
+        configuration.set_clear_fault_status(true);
+        self.write_configuration(configuration)
+    }
+
+    pub fn enable_bias(&mut self, enable: bool) -> Result<(), Max31865Err<SPI::Error>> {
+        let mut configuration = self.read_configuration()?.stable();
+        configuration.set_bias_enabled(enable);
+        self.write_configuration(configuration)
+    }
+
+    /// Legacy fault-cycle control; manual stages require application RC delays.
+    /// Non-None cycles leave automatic conversion disabled and bias enabled.
+    pub fn read_fault(&mut self, cycle: FaultCycle) -> Result<(), Max31865Err<SPI::Error>> {
         if cycle != FaultCycle::None {
-            let mut config_reg = self.read_u8(Register::CONFIG_REG)?;
-            config_reg &= 0x11;
-
-            match cycle {
-                FaultCycle::Auto => {
-                    self.write_u8(Register::CONFIG_REG, config_reg | 0b10000100)
-                        .expect("fail to fault_cycle auto");
-                    self.delay.delay_ms(1);
-                }
-                FaultCycle::ManualRun => {
-                    self.write_u8(Register::CONFIG_REG, config_reg | 0b10001000)
-                        .expect("fail to fault_cycle ManualRun");
-                }
-                FaultCycle::ManualFinish => {
-                    self.write_u8(Register::CONFIG_REG, config_reg | 0b10001100)
-                        .expect("fail to fault_cycle ManualFinish");
-                }
-
-                _ => {}
+            let mut configuration = self.read_configuration()?.stable();
+            configuration.set_automatic_conversion(false);
+            configuration.set_bias_enabled(true);
+            configuration.set_fault_detection_cycle(cycle);
+            self.write_configuration(configuration)?;
+            if cycle != FaultCycle::ManualRun {
+                self.delay.delay_ms(FAULT_CYCLE_DELAY_MS);
             }
         }
-        match self.read_u8(Register::FAULTSTAT_REG)? {
-            0b00000100 => Err(Max31865Err::Hardware(HardwareErr::OverOrUnderVoltage)),
-            0b00001000 => Err(Max31865Err::Hardware(HardwareErr::RtdinForceMinusOpen)),
-            0b00010000 => Err(Max31865Err::Hardware(HardwareErr::RefinForceMinusOpen)),
-            0b00100000 => Err(Max31865Err::Hardware(
-                HardwareErr::RefinGreatherThanPoint85TimeVBias,
-            )),
-            0b01000000 => Err(Max31865Err::Hardware(HardwareErr::RtdLowThreshold)),
-            0b10000000 => Err(Max31865Err::Hardware(HardwareErr::RtdHighThreshold)),
-            _ => Ok(()),
-        }
+        let status = self.read_fault_status()?;
+        self.fault_evaluation
+            .evaluate(status)
+            .map_err(Max31865Err::Hardware)
     }
-    pub fn auto_convert(&mut self, enable: bool) -> Result<(), Max31865Err> {
-        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
-        if enable {
-            value.insert(Register::CONFIG_MODEAUTO);
-        } else {
-            value.remove(Register::CONFIG_MODEAUTO);
-        }
-        self.write_u8(Register::CONFIG_REG, value.into())
-            .expect("fail to auto_convert");
 
+    pub fn auto_convert(&mut self, enable: bool) -> Result<(), Max31865Err<SPI::Error>> {
+        let mut configuration = self.read_configuration()?.stable();
+        configuration.set_automatic_conversion(enable);
+        self.write_configuration(configuration)
+    }
+
+    /// Select notch filter; stop automatic conversion while changing it.
+    pub fn enable_50hz(&mut self, enable: bool) -> Result<(), Max31865Err<SPI::Error>> {
+        let mut configuration = self.read_configuration()?.stable();
+        let filter = if enable {
+            MainsFilter::Hertz50
+        } else {
+            MainsFilter::Hertz60
+        };
+        let restore_automatic =
+            configuration.automatic_conversion() && configuration.mains_filter() != filter;
+        if restore_automatic {
+            configuration.set_automatic_conversion(false);
+            self.write_configuration(configuration)?;
+        }
+        configuration.set_mains_filter(filter);
+        self.write_configuration(configuration)?;
+        if restore_automatic {
+            configuration.set_automatic_conversion(true);
+            self.write_configuration(configuration)?;
+        }
         Ok(())
     }
 
-    pub fn enable_50hz(&mut self, enable: bool) -> Result<(), Max31865Err> {
-        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
-        if enable {
-            value.insert(Register::CONFIG_FILT50HZ);
-        } else {
-            value.remove(Register::CONFIG_FILT50HZ);
-        }
-        self.write_u8(Register::CONFIG_REG, value.into())
-            .expect("fail to enable_50hz");
-
-        Ok(())
+    /// Acquire and return the unshifted 15-bit ratio count.
+    pub fn read_rtd(&mut self) -> Result<u16, Max31865Err<SPI::Error>> {
+        self.acquire_rtd().map(|register| register.count().value())
     }
-    pub fn read_rtd(&mut self) -> Result<u16, Max31865Err> {
+
+    /// Write raw shifted threshold words, preserving the existing LSB-first order.
+    /// This is four separate transactions, not an atomic update.
+    pub fn set_threshold(&mut self, lower: u16, upper: u16) -> Result<(), Max31865Err<SPI::Error>> {
+        let [lower_high, lower_low] = lower.to_be_bytes();
+        let [upper_high, upper_low] = upper.to_be_bytes();
+        self.write_u8(Address::LowFaultThresholdLeastSignificant.into(), lower_low)?;
+        self.write_u8(Address::LowFaultThresholdMostSignificant.into(), lower_high)?;
+        self.write_u8(
+            Address::HighFaultThresholdLeastSignificant.into(),
+            upper_low,
+        )?;
+        self.write_u8(
+            Address::HighFaultThresholdMostSignificant.into(),
+            upper_high,
+        )
+    }
+
+    pub fn get_lower_threshold(&mut self) -> Result<u16, Max31865Err<SPI::Error>> {
+        self.read_lower_threshold().map(Into::into)
+    }
+
+    pub fn get_upper_threshold(&mut self) -> Result<u16, Max31865Err<SPI::Error>> {
+        self.read_upper_threshold().map(Into::into)
+    }
+
+    pub fn set_wires(&mut self, num_wire: Numwires) -> Result<(), Max31865Err<SPI::Error>> {
+        let mut configuration = self.read_configuration()?.stable();
+        configuration.set_three_wire_compensation(num_wire == Numwires::MAX31865_3_WIRE);
+        self.write_configuration(configuration)
+    }
+
+    pub fn temperature(&mut self) -> Result<f32, Max31865Err<SPI::Error>> {
+        let register = self.acquire_rtd()?;
+        self.rtd_conversion
+            .temperature(register)
+            .ok_or(Max31865Err::InvalidConversion)
+    }
+
+    pub fn get_resistance(&mut self) -> Result<f32, Max31865Err<SPI::Error>> {
+        let register = self.acquire_rtd()?;
+        Ok(self.rtd_conversion.resistance(register))
+    }
+
+    pub fn get_debug_value(&mut self) -> Result<DebugValue, Max31865Err<SPI::Error>> {
+        let register = self.acquire_rtd()?;
+        self.rtd_conversion
+            .debug_value(register)
+            .ok_or(Max31865Err::InvalidConversion)
+    }
+
+    pub fn get_ratio(&mut self) -> Result<f32, Max31865Err<SPI::Error>> {
+        let register = self.acquire_rtd()?;
+        Ok(self.rtd_conversion.ratio(register))
+    }
+
+    fn write_configuration(
+        &mut self,
+        configuration: Configuration,
+    ) -> Result<(), Max31865Err<SPI::Error>> {
+        self.write_u8(Address::Configuration.into(), configuration.into())
+    }
+
+    fn acquire_rtd(&mut self) -> Result<RtdResistance, Max31865Err<SPI::Error>> {
         self.clear_fault()?;
         self.enable_bias(true)?;
-        self.delay.delay_ms(10);
-
-        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
-        value.insert(Register::CONFIG_1SHOT);
-
-        self.write_u8(Register::CONFIG_REG, value.into())
-            .expect("fail to read_rtd");
-
-        self.delay.delay_ms(65);
-
-        let mut rtd = self.read_u16(Register::RTDMSB_REG)?;
-
+        self.delay.delay_ms(ACQUISITION_BIAS_DELAY_MS);
+        let mut configuration = self.read_configuration()?.stable();
+        configuration.set_one_shot(true);
+        self.write_configuration(configuration)?;
+        let conversion_delay = match configuration.mains_filter() {
+            MainsFilter::Hertz60 => CONVERSION_60_HZ_DELAY_MS,
+            MainsFilter::Hertz50 => CONVERSION_50_HZ_DELAY_MS,
+        };
+        self.delay.delay_ms(conversion_delay);
+        let register = self.read_resistance_register()?;
         self.enable_bias(false)?;
-
-        let is_fault = rtd & 0x01;
-        if is_fault == 0x01 {
-            let fault = self.read_fault(FaultCycle::ManualRun);
-            match fault {
-                Ok(_) => {}
-                Err(err) => return Err(err),
-            }
+        if register.fault() {
+            // Inspect the latched cause, rather than opening FORCE- mid-read.
+            self.read_fault(FaultCycle::None)?;
+            return Err(Max31865Err::Hardware(HardwareErr::UnspecifiedRtdFault));
         }
-        // shited 1 to right, because first bit
-        // is fault bit and not used in rtd result value
-        rtd >>= 1;
-
-        Ok(rtd)
-    }
-
-    pub fn set_threshold(&mut self, lower: u16, upper: u16) -> Result<(), Max31865Err> {
-        self.write_u8(Register::LFAULTLSB_REG, (lower & 0xFF) as u8)
-            .expect("fail to set lsb threshold reg");
-
-        self.write_u8(Register::LFAULTMSB_REG, (lower >> 8) as u8)
-            .expect("fail to set lsb threshold reg");
-
-        self.write_u8(Register::HFAULTLSB_REG, (upper & 0xFF) as u8)
-            .expect("fail to set msb threshold reg");
-
-        self.write_u8(Register::HFAULTMSB_REG, (upper >> 8) as u8)
-            .expect("fail to set msb threshold reg");
-        Ok(())
-    }
-
-    pub fn get_lower_threshold(&mut self) -> Result<u16, Max31865Err> {
-        self.read_u16(Register::LFAULTMSB_REG)
-    }
-
-    pub fn get_upper_threshold(&mut self) -> Result<u16, Max31865Err> {
-        self.read_u16(Register::HFAULTMSB_REG)
-    }
-
-    pub fn set_wires(&mut self, num_wire: Numwires) -> Result<(), Max31865Err> {
-        let mut value: Register = self.read_u8(Register::CONFIG_REG)?.into();
-        if num_wire == Numwires::MAX31865_3_WIRE {
-            value.insert(Register::CONFIG_3WIRE);
-        } else {
-            value.remove(Register::CONFIG_3WIRE);
-        }
-        self.write_u8(Register::CONFIG_REG, value.into())
-            .expect("fail to set_wires");
-
-        Ok(())
-    }
-
-    pub fn temperature(&mut self) -> Result<f32, Max31865Err> {
-        let rtd_raw: f32 = self.read_rtd()? as f32;
-
-        let mut rt = rtd_raw / 32768.0;
-        rt *= self.ref_resistor;
-
-        let z1 = -Register::RTD_A;
-        let z2 = Register::RTD_A * Register::RTD_A - (4.0 * Register::RTD_B);
-        let z3 = (4.0 * Register::RTD_B) / self.rtd_nominal;
-        let z4 = 2.0 * Register::RTD_B;
-
-        let mut temp = z2 + (z3 * rt);
-        temp = (libm::sqrtf(temp) + z1) / z4;
-
-        if temp >= 0.0 {
-            return Ok(temp);
-        }
-
-        rt /= self.rtd_nominal;
-        rt *= 100.0;
-
-        let mut rpoly = rt;
-
-        temp = -242.02;
-        temp += 2.2228 * rpoly;
-        rpoly *= rt; // square
-        temp += 2.5859e-3 * rpoly;
-        rpoly *= rt; // ^3
-        temp -= 4.8260e-6 * rpoly;
-        rpoly *= rt; // ^4
-        temp -= 2.8183e-8 * rpoly;
-        rpoly *= rt; // ^5
-        temp += 1.5243e-10 * rpoly;
-
-        Ok(temp)
-    }
-
-    pub fn get_resistance(&mut self) -> Result<f32, Max31865Err> {
-        let rtd = self.read_rtd()? as f32;
-        let ratio = rtd * 32768.0;
-
-        Ok(self.ref_resistor * ratio)
-    }
-
-    pub fn get_debug_value(&mut self) -> Result<DebugValue, Max31865Err> {
-        let rtd_raw = self.read_rtd()? as f32;
-        let ratio = rtd_raw * 32768.0;
-
-        let resistance = self.ref_resistor * ratio;
-
-        let mut rt = rtd_raw / 32768.0;
-        rt *= self.ref_resistor;
-
-        let z1 = -Register::RTD_A;
-        let z2 = Register::RTD_A * Register::RTD_A - (4.0 * Register::RTD_B);
-        let z3 = (4.0 * Register::RTD_B) / self.rtd_nominal;
-        let z4 = 2.0 * Register::RTD_B;
-
-        let mut temperature = z2 + (z3 * rt);
-        temperature = (libm::sqrtf(temperature) + z1) / z4;
-
-        if temperature >= 0.0 {
-            return Ok(DebugValue {
-                temperature,
-                resistance,
-                ratio,
-            });
-        }
-
-        rt /= self.rtd_nominal;
-        rt *= 100.0;
-
-        let mut rpoly = rt;
-
-        temperature = -242.02;
-        temperature += 2.2228 * rpoly;
-        rpoly *= rt; // square
-        temperature += 2.5859e-3 * rpoly;
-        rpoly *= rt; // ^3
-        temperature -= 4.8260e-6 * rpoly;
-        rpoly *= rt; // ^4
-        temperature -= 2.8183e-8 * rpoly;
-        rpoly *= rt; // ^5
-        temperature += 1.5243e-10 * rpoly;
-
-        Ok(DebugValue {
-            temperature,
-            resistance,
-            ratio,
-        })
-    }
-
-    pub fn get_ratio(&mut self) -> Result<f32, Max31865Err> {
-        let rtd = self.read_rtd()? as f32;
-        Ok(rtd * 32768.0)
+        Ok(register)
     }
 }
