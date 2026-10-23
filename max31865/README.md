@@ -54,6 +54,8 @@ Configure the external SPI device for **mode 1 or mode 3**, MSB-first, at most
 5 MHz. The HAL/device adapter must meet the datasheet CS setup/inactive minimum
 of 400 ns, CS hold minimum of 100 ns, and all signal timing limits. A shared-bus
 adapter must select the right mode/rate for each transaction.
+Call the constructor only after board power is stable; the driver neither
+controls the power supply nor verifies a device identity.
 
 `try_new` performs the original startup operations:
 
@@ -211,6 +213,8 @@ cargo build --target thumbv7em-none-eabi --all-features
 ```
 
 Tests cover the original working path, typed data processing, register
-preservation, SPI framing and multi-step failure forwarding. The original driver
-was reported working on hardware; all new/refactored behavior still requires
-hardware regression testing.
+preservation, SPI framing and multi-step failure forwarding. The 21 unit/integration
+tests and one documentation test pass with and without `defmt`. Formatting,
+strict Clippy, rustdoc, and `thumbv7em-none-eabi` builds pass in both configurations.
+The original driver was reported working on hardware; all new/refactored behavior
+still requires hardware regression testing.
