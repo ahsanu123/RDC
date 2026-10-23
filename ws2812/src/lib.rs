@@ -1,111 +1,155 @@
 #![no_std]
+#![doc = include_str!("../README.md")]
 
-pub struct Nanos {
-    pub value: u32,
-}
+mod comproc;
+mod error;
+mod function;
+mod procedure;
+mod validation;
 
-pub struct Constant {}
+use embedded_hal::spi::{ErrorType, SpiDevice};
+use function::ColorEncoding;
 
-// based on WS2812B-2020
-// non 3.3V compitable
-impl Constant {
-    pub const T0H: Nanos = Nanos { value: 350 };
-    pub const T1H: Nanos = Nanos { value: 2 * 350 };
-    pub const T0L: Nanos = Nanos { value: 2 * 350 };
-    pub const T1L: Nanos = Nanos { value: 2 * 350 };
-    pub const RES: Nanos = Nanos { value: 850 * 350 }; // 297.5us
+pub use error::Error;
+pub use procedure::{Constant, ENCODED_BYTES_PER_PIXEL, Nanos, RESET_BYTES, SPI_FREQUENCY_HZ};
+pub use validation::{MAX_SPI_FREQUENCY_HZ, MIN_SPI_FREQUENCY_HZ};
 
-    pub const HIGH: u8 = 0x0C;
-    pub const LOW: u8 = 0x08;
-}
-
-pub struct RGB {
+/// Eight-bit color channels, transmitted as GRB (WS2812B-2020, page 5).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct RgbColor {
     pub r: u8,
     pub g: u8,
     pub b: u8,
 }
 
-impl RGB {
-    pub fn new(r: u8, g: u8, b: u8) -> Self {
+impl RgbColor {
+    pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
     }
 }
 
-pub struct Ws2812<SPI>
-where
-    SPI: embedded_hal::spi::SpiDevice,
-{
+/// Compatibility name for the original RGB type.
+pub use RgbColor as RGB;
+
+/// Worldsemi WS2812B-2020 SPI waveform driver (datasheet pages 4-5).
+///
+/// SPI must be configured externally for MSB-first, mode 0, 3.0-3.2 MHz.
+/// The physical MOSI line must be dedicated to the LEDs: they have no CS input.
+pub struct Ws2812<SPI> {
     spi: SPI,
+    color_encoding: ColorEncoding,
 }
 
-impl<SPI> Ws2812<SPI>
-where
-    SPI: embedded_hal::spi::SpiDevice,
-{
-    // TODO: make sure timing is correct,
-    // and follow constant config
-    // 3.2Mhz
+impl<SPI: ErrorType> Ws2812<SPI> {
+    /// Take ownership without I/O; assumes externally configured 3.2 MHz SPI.
+    ///
+    /// Use try_new to validate a caller-reported clock. Neither constructor
+    /// configures or measures the SPI clock.
     pub fn new(spi: SPI) -> Self {
-        Self { spi }
+        Self {
+            spi,
+            color_encoding: ColorEncoding,
+        }
     }
 
+    /// Validate the reported actual SPI clock before taking ownership.
+    ///
+    /// On failure, the passed SPI device is dropped without I/O.
+    pub fn try_new(spi: SPI, spi_frequency_hz: u32) -> Result<Self, Error<SPI::Error>> {
+        validation::validate_spi_frequency(spi_frequency_hz)?;
+        Ok(Self::new(spi))
+    }
+
+    /// Return the SPI device without issuing a reset or changing the LEDs.
+    pub fn release(self) -> SPI {
+        self.spi
+    }
+}
+
+impl<SPI: SpiDevice<u8>> Ws2812<SPI> {
+    /// Send a complete array of pixels in one transaction, including reset/latch.
+    ///
+    /// Uses 12 * COLOR_COUNTS bytes of local stack storage. An empty array is
+    /// a no-op. Use write_colors_buffered for a large chain.
     pub fn write_colors<const COLOR_COUNTS: usize>(
         &mut self,
-        colors: &[RGB; COLOR_COUNTS],
-    ) -> Result<(), SPI::Error> {
-        for color in colors.iter() {
-            self.write_color(color)?;
+        colors: &[RgbColor; COLOR_COUNTS],
+    ) -> Result<(), Error<SPI::Error>> {
+        if colors.is_empty() {
+            return Ok(());
         }
-        Ok(())
+        let encoded = colors.map(|color| self.color_encoding.encode(color));
+        comproc::write_frame(&mut self.spi, encoded.as_flattened())
     }
 
-    pub fn write_color(&mut self, color: &RGB) -> Result<(), SPI::Error> {
-        let grb = self.build_rgb(color);
-
-        self.spi.write(&grb)?;
-
-        Ok(())
+    /// Send one complete frame for the first LED, not an append operation.
+    pub fn write_color(&mut self, color: &RgbColor) -> Result<(), Error<SPI::Error>> {
+        self.write_colors(&[*color])
     }
 
-    fn build_rgb(&self, rgb: &RGB) -> [u8; 12] {
-        // ws2812 expects GRB order, not RGB
-        // so convert it into GRB
-
-        let mut grb = [0u8; 12];
-
-        let r = self.build_byte(rgb.r);
-        let g = self.build_byte(rgb.g);
-        let b = self.build_byte(rgb.b);
-
-        grb[0..4].copy_from_slice(&g);
-        grb[5..8].copy_from_slice(&r);
-        grb[9..12].copy_from_slice(&b);
-
-        grb
+    /// Encode a color slice into caller storage and send one complete frame.
+    ///
+    /// At least 12 bytes per pixel are required. Unused scratch bytes are
+    /// unchanged and not transmitted. Invalid input causes no bus access.
+    pub fn write_colors_buffered(
+        &mut self,
+        colors: &[RgbColor],
+        scratch: &mut [u8],
+    ) -> Result<(), Error<SPI::Error>> {
+        let encoded = procedure::encode_frame(&self.color_encoding, colors, scratch)?;
+        if encoded.is_empty() {
+            return Ok(());
+        }
+        comproc::write_frame(&mut self.spi, encoded)
     }
 
-    fn build_byte(&self, byte: u8) -> [u8; 4] {
-        let mut data: [u8; 4] = [0; 4];
+    /// Send a low reset/latch interval, which may latch previously partial data.
+    ///
+    /// This does not clear LEDs to black. A nonempty frame includes this
+    /// operation automatically before and after the payload.
+    pub fn latch(&mut self) -> Result<(), Error<SPI::Error>> {
+        comproc::latch(&mut self.spi)
+    }
+}
 
-        (0..8).for_each(|i| {
-            // NOTE:
-            // use != 0 , because if == 1 it only work on first bit
-            // remember shifting one to left if bit is 1 its not == 1 but its may be 2
-            // or more!, based on bit position,
-            // so == 1 is not suitable here.
-            let nibble = if byte & (1 << i) != 0 {
-                Constant::HIGH
-            } else {
-                Constant::LOW
-            };
+#[cfg(feature = "async")]
+impl<SPI: embedded_hal_async::spi::SpiDevice<u8>> Ws2812<SPI> {
+    /// Async write_colors; cancellation may leave a partial frame on the chain.
+    ///
+    /// Stores 12 * COLOR_COUNTS payload bytes in the future. Timing within the
+    /// payload must be guaranteed by the HAL, not by executor scheduling.
+    pub async fn write_colors_async<const COLOR_COUNTS: usize>(
+        &mut self,
+        colors: &[RgbColor; COLOR_COUNTS],
+    ) -> Result<(), Error<SPI::Error>> {
+        if colors.is_empty() {
+            return Ok(());
+        }
+        let encoded = colors.map(|color| self.color_encoding.encode(color));
+        comproc::write_frame_async(&mut self.spi, encoded.as_flattened()).await
+    }
 
-            // high nibble leaves the SPI peripheral first.
-            if i % 2 == 0 {
-                data[i / 2] |= nibble << 4;
-            } else {
-                data[i / 2] |= nibble;
-            }
-        });
-        data
+    /// Async single-pixel frame; this does not append to an earlier frame.
+    pub async fn write_color_async(&mut self, color: &RgbColor) -> Result<(), Error<SPI::Error>> {
+        self.write_colors_async(&[*color]).await
+    }
+
+    /// Async complete frame using caller-provided payload storage.
+    pub async fn write_colors_buffered_async(
+        &mut self,
+        colors: &[RgbColor],
+        scratch: &mut [u8],
+    ) -> Result<(), Error<SPI::Error>> {
+        let encoded = procedure::encode_frame(&self.color_encoding, colors, scratch)?;
+        if encoded.is_empty() {
+            return Ok(());
+        }
+        comproc::write_frame_async(&mut self.spi, encoded).await
+    }
+
+    /// Async low reset/latch interval; this does not clear the chain.
+    pub async fn latch_async(&mut self) -> Result<(), Error<SPI::Error>> {
+        comproc::latch_async(&mut self.spi).await
     }
 }
