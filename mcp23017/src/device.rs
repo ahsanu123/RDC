@@ -1,6 +1,7 @@
 use embedded_hal::{i2c::I2c, spi::SpiDevice};
 
 use crate::{
+    DeviceError,
     comproc::{I2cInterface, Interface, SpiInterface},
     function::PortValues,
     register::{
@@ -10,23 +11,6 @@ use crate::{
     },
     u3,
 };
-
-/// Bus failures and rejected register configurations.
-#[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum Error<E> {
-    Bus(E),
-    /// BANK=1, a reserved bit set, or HAEN disabled for SPI.
-    InvalidConfiguration,
-    /// MCP23017 GPA7 and GPB7 are output-only (DS20001952D).
-    UnsupportedInputPin,
-}
-
-fn bus_error<E>(error: E) -> Error<E> {
-    #[cfg(feature = "defmt")]
-    defmt::error!("MCP23x17 bus transaction failed");
-    Error::Bus(error)
-}
 
 /// Microchip MCP23017 GPIO expander, generic over its register transport.
 ///
@@ -44,7 +28,7 @@ pub type MCP23S17<SPI> = MCP23017<SpiInterface<SPI>>;
 
 impl<I2C: I2c> MCP23017<I2cInterface<I2C>> {
     /// Connect to 0x20 + address pins. Does not reset or reconfigure I/O.
-    pub fn new_i2c(bus: I2C, address_pins: u3) -> Result<Self, Error<I2C::Error>> {
+    pub fn new_i2c(bus: I2C, address_pins: u3) -> Result<Self, DeviceError<I2C::Error>> {
         Self::connect(I2cInterface::new(bus, address_pins))
     }
 }
@@ -52,14 +36,14 @@ impl<I2C: I2c> MCP23017<I2cInterface<I2C>> {
 impl<SPI: SpiDevice<u8>> MCP23017<SpiInterface<SPI>> {
     /// Connect after reset, enabling hardware addressing (including the A2
     /// silicon erratum). Startup affects all reset devices sharing this CS.
-    pub fn new_spi(bus: SPI, address_pins: u3) -> Result<Self, Error<SPI::Error>> {
+    pub fn new_spi(bus: SPI, address_pins: u3) -> Result<Self, DeviceError<SPI::Error>> {
         Self::connect(SpiInterface::new(bus, address_pins))
     }
 }
 
 impl<I: Interface> MCP23017<I> {
-    pub(crate) fn connect(mut interface: I) -> Result<Self, Error<I::Error>> {
-        interface.initialize().map_err(bus_error)?;
+    pub(crate) fn connect(mut interface: I) -> Result<Self, DeviceError<I::Error>> {
+        interface.initialize().map_err(DeviceError::from)?;
         let mut device = Self {
             interface,
             functions: PortValues,
@@ -77,11 +61,11 @@ impl<I: Interface> MCP23017<I> {
     }
 
     /// Read a typed register. GPIO and INTCAP reads acknowledge interrupts.
-    pub fn read_register<R: Register>(&mut self, port: Port) -> Result<R, Error<I::Error>> {
+    pub fn read_register<R: Register>(&mut self, port: Port) -> Result<R, DeviceError<I::Error>> {
         self.interface
             .read(R::address(port))
             .map(R::from)
-            .map_err(bus_error)
+            .map_err(DeviceError::from)
     }
 
     /// Write a typed writable register. IOCON must use `write_configuration`.
@@ -91,20 +75,27 @@ impl<I: Interface> MCP23017<I> {
         &mut self,
         port: Port,
         value: R,
-    ) -> Result<(), Error<I::Error>> {
+    ) -> Result<(), DeviceError<I::Error>> {
         self.interface
             .write(R::address(port), value.into())
-            .map_err(bus_error)
+            .map_err(DeviceError::from)
     }
 
-    fn check_configuration(configuration: Configuration) -> Result<(), Error<I::Error>> {
-        if configuration.separate_register_banks()
-            || configuration.unimplemented_bit()
-            || (I::REQUIRES_HAEN && !configuration.hardware_address_enable())
-        {
+    fn check_configuration(configuration: Configuration) -> Result<(), DeviceError<I::Error>> {
+        if configuration.separate_register_banks() {
             #[cfg(feature = "defmt")]
-            defmt::error!("MCP23x17 rejected invalid IOCON configuration");
-            return Err(Error::InvalidConfiguration);
+            defmt::error!("MCP23x17 requires BANK=0");
+            return Err(DeviceError::UnsupportedRegisterBank);
+        }
+        if configuration.unimplemented_bit() {
+            #[cfg(feature = "defmt")]
+            defmt::error!("MCP23x17 unimplemented configuration bit must be zero");
+            return Err(DeviceError::ReservedConfigurationBitSet);
+        }
+        if I::REQUIRES_HAEN && !configuration.hardware_address_enable() {
+            #[cfg(feature = "defmt")]
+            defmt::error!("MCP23S17 requires hardware addressing");
+            return Err(DeviceError::HardwareAddressingDisabled);
         }
         Ok(())
     }
@@ -114,11 +105,11 @@ impl<I: Interface> MCP23017<I> {
     pub fn write_configuration(
         &mut self,
         configuration: Configuration,
-    ) -> Result<(), Error<I::Error>> {
+    ) -> Result<(), DeviceError<I::Error>> {
         Self::check_configuration(configuration)?;
         self.interface
             .write(Configuration::ADDRESS_A, configuration.into())
-            .map_err(bus_error)
+            .map_err(DeviceError::from)
     }
 
     fn update_bit<R: WritableRegister>(
@@ -126,7 +117,7 @@ impl<I: Interface> MCP23017<I> {
         port: Port,
         pin: Pin,
         enabled: bool,
-    ) -> Result<(), Error<I::Error>> {
+    ) -> Result<(), DeviceError<I::Error>> {
         let previous: u8 = self.read_register::<R>(port)?.into();
         let mask = pin.mask();
         let next = if enabled {
@@ -142,11 +133,11 @@ impl<I: Interface> MCP23017<I> {
         port: Port,
         pin: Pin,
         direction: Direction,
-    ) -> Result<(), Error<I::Error>> {
+    ) -> Result<(), DeviceError<I::Error>> {
         if !I::SUPPORTS_PIN7_INPUT && pin == Pin::P7 && direction == Direction::Input {
             #[cfg(feature = "defmt")]
             defmt::error!("MCP23017 pin 7 supports output only");
-            return Err(Error::UnsupportedInputPin);
+            return Err(DeviceError::UnsupportedInputPin);
         }
         self.update_bit::<InputDirection>(port, pin, direction == Direction::Input)
     }
@@ -156,7 +147,7 @@ impl<I: Interface> MCP23017<I> {
         port: Port,
         pin: Pin,
         enabled: bool,
-    ) -> Result<(), Error<I::Error>> {
+    ) -> Result<(), DeviceError<I::Error>> {
         self.update_bit::<PullUpResistors>(port, pin, enabled)
     }
 
@@ -165,7 +156,7 @@ impl<I: Interface> MCP23017<I> {
         port: Port,
         pin: Pin,
         inverted: bool,
-    ) -> Result<(), Error<I::Error>> {
+    ) -> Result<(), DeviceError<I::Error>> {
         self.update_bit::<InputPolarity>(port, pin, inverted)
     }
 
@@ -174,7 +165,7 @@ impl<I: Interface> MCP23017<I> {
         port: Port,
         pin: Pin,
         enabled: bool,
-    ) -> Result<(), Error<I::Error>> {
+    ) -> Result<(), DeviceError<I::Error>> {
         self.update_bit::<InterruptEnable>(port, pin, enabled)
     }
 
@@ -184,7 +175,7 @@ impl<I: Interface> MCP23017<I> {
         port: Port,
         pin: Pin,
         compare_to_default: bool,
-    ) -> Result<(), Error<I::Error>> {
+    ) -> Result<(), DeviceError<I::Error>> {
         self.update_bit::<InterruptControl>(port, pin, compare_to_default)
     }
 
@@ -193,18 +184,23 @@ impl<I: Interface> MCP23017<I> {
         port: Port,
         pin: Pin,
         high: bool,
-    ) -> Result<(), Error<I::Error>> {
+    ) -> Result<(), DeviceError<I::Error>> {
         self.update_bit::<InterruptDefaultValue>(port, pin, high)
     }
 
     /// Set a latch bit using OLAT, never GPIO, preserving other output bits.
     /// Set the latch before switching a pin to Output to avoid an initial glitch.
-    pub fn set_output(&mut self, port: Port, pin: Pin, high: bool) -> Result<(), Error<I::Error>> {
+    pub fn set_output(
+        &mut self,
+        port: Port,
+        pin: Pin,
+        high: bool,
+    ) -> Result<(), DeviceError<I::Error>> {
         self.update_bit::<OutputLatch>(port, pin, high)
     }
 
     /// Read a pin's GPIO level, acknowledging the entire port's interrupt.
-    pub fn read_pin(&mut self, port: Port, pin: Pin) -> Result<bool, Error<I::Error>> {
+    pub fn read_pin(&mut self, port: Port, pin: Pin) -> Result<bool, DeviceError<I::Error>> {
         let levels: u8 = self
             .read_register::<GeneralPurposeInputOutput>(port)?
             .into();
@@ -213,7 +209,7 @@ impl<I: Interface> MCP23017<I> {
 
     /// Read A then B; A occupies bits 0-7. Acknowledges both interrupts.
     /// The two reads are not an atomic snapshot.
-    pub fn read_ports(&mut self) -> Result<u16, Error<I::Error>> {
+    pub fn read_ports(&mut self) -> Result<u16, DeviceError<I::Error>> {
         let a = self.read_register::<GeneralPurposeInputOutput>(Port::A)?;
         let b = self.read_register::<GeneralPurposeInputOutput>(Port::B)?;
         Ok(self.functions.combine_input_levels(a, b))
@@ -221,21 +217,21 @@ impl<I: Interface> MCP23017<I> {
 
     /// Read interrupt captures A then B, acknowledging each port's interrupt.
     /// Read INTF first if the interrupt sources are needed.
-    pub fn read_capture(&mut self) -> Result<u16, Error<I::Error>> {
+    pub fn read_capture(&mut self) -> Result<u16, DeviceError<I::Error>> {
         let a = self.read_register::<InterruptCapture>(Port::A)?;
         let b = self.read_register::<InterruptCapture>(Port::B)?;
         Ok(self.functions.combine_captured_levels(a, b))
     }
 
     /// Read interrupt-source flags without acknowledging interrupts.
-    pub fn read_interrupt_flags(&mut self) -> Result<u16, Error<I::Error>> {
+    pub fn read_interrupt_flags(&mut self) -> Result<u16, DeviceError<I::Error>> {
         let a = self.read_register::<InterruptFlags>(Port::A)?;
         let b = self.read_register::<InterruptFlags>(Port::B)?;
         Ok(self.functions.combine_interrupt_flags(a, b))
     }
 
     /// Read output latches independently of GPIO levels and interrupts.
-    pub fn read_output_latches(&mut self) -> Result<u16, Error<I::Error>> {
+    pub fn read_output_latches(&mut self) -> Result<u16, DeviceError<I::Error>> {
         let a = self.read_register::<OutputLatch>(Port::A)?;
         let b = self.read_register::<OutputLatch>(Port::B)?;
         Ok(self.functions.combine_output_latches(a, b))
@@ -243,7 +239,7 @@ impl<I: Interface> MCP23017<I> {
 
     /// Write A then B, with A in bits 0-7. This is not atomic; if the second
     /// write fails, port A has already changed.
-    pub fn write_outputs(&mut self, value: u16) -> Result<(), Error<I::Error>> {
+    pub fn write_outputs(&mut self, value: u16) -> Result<(), DeviceError<I::Error>> {
         let [a, b] = value.to_le_bytes();
         self.write_register(Port::A, OutputLatch::from(a))?;
         self.write_register(Port::B, OutputLatch::from(b))

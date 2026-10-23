@@ -1,6 +1,7 @@
+use embedded_hal::spi::{ErrorKind, ErrorType, Operation, SpiDevice};
 use embedded_hal_mock::eh1::spi::{Mock, Transaction};
 use mcp23017::{
-    Direction, Error, MCP23S17, Pin, Port,
+    DeviceError, Direction, MCP23S17, Pin, Port,
     builder::Builder,
     comproc::SpiInterface,
     register::{Configuration, InterruptCapture, OutputLatch},
@@ -84,10 +85,15 @@ fn test_spi_output_update_uses_selected_address_and_latch() {
 fn test_spi_configuration_rejects_disabled_hardware_addressing_before_io() {
     let mut bus = Mock::new(&initialization(2));
     let mut device = MCP23S17::new_spi(bus.clone(), u3::new(2)).unwrap();
-    for invalid in [0x00, 0x80, 0x88, 0x09] {
+    for (invalid, expected) in [
+        (0x00, DeviceError::HardwareAddressingDisabled),
+        (0x80, DeviceError::UnsupportedRegisterBank),
+        (0x88, DeviceError::UnsupportedRegisterBank),
+        (0x09, DeviceError::ReservedConfigurationBitSet),
+    ] {
         assert_eq!(
             device.write_configuration(Configuration::from(invalid)),
-            Err(Error::InvalidConfiguration)
+            Err(expected)
         );
     }
     bus.done();
@@ -116,7 +122,7 @@ fn test_spi_connection_rejects_failed_hardware_address_enable_readback() {
     let mut bus = Mock::new(&expectations);
     assert!(matches!(
         MCP23S17::new_spi(bus.clone(), u3::new(4)),
-        Err(Error::InvalidConfiguration)
+        Err(DeviceError::HardwareAddressingDisabled)
     ));
     bus.done();
 }
@@ -139,4 +145,102 @@ fn test_spi_allows_pin7_input_direction() {
         .set_direction(Port::B, Pin::P7, Direction::Input)
         .unwrap();
     bus.done();
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum SpiInterfaceError {
+    Injected {
+        transaction: usize,
+        context: Vec<u8>,
+    },
+    Mock(ErrorKind),
+}
+
+impl embedded_hal::spi::Error for SpiInterfaceError {
+    fn kind(&self) -> ErrorKind {
+        match self {
+            Self::Injected { .. } => ErrorKind::Other,
+            Self::Mock(kind) => *kind,
+        }
+    }
+}
+
+/// Injects serial failures while retaining DS20001952D section 3.2.3 SPI framing.
+struct FailingSpi {
+    bus: Mock<u8>,
+    transactions_before_failure: usize,
+    failure: Option<SpiInterfaceError>,
+}
+
+impl ErrorType for FailingSpi {
+    type Error = SpiInterfaceError;
+}
+
+impl SpiDevice for FailingSpi {
+    fn transaction(&mut self, operations: &mut [Operation<'_, u8>]) -> Result<(), Self::Error> {
+        if self.transactions_before_failure == 0 {
+            return Err(self
+                .failure
+                .take()
+                .expect("failure must only be injected once"));
+        }
+        self.transactions_before_failure -= 1;
+        self.bus
+            .transaction(operations)
+            .map_err(SpiInterfaceError::Mock)
+    }
+}
+
+fn injected_failure(transaction: usize) -> SpiInterfaceError {
+    SpiInterfaceError::Injected {
+        transaction,
+        context: vec![0xde, 0xad],
+    }
+}
+
+#[test]
+fn test_spi_connection_forwards_owned_errors_from_every_initialization_step() {
+    for (transaction, completed_expectations) in [(0, 0), (1, 3), (2, 6)] {
+        let expectations = initialization(5);
+        let mut bus = Mock::new(&expectations[..completed_expectations]);
+        let interface = SpiInterface::new(
+            FailingSpi {
+                bus: bus.clone(),
+                transactions_before_failure: transaction,
+                failure: Some(injected_failure(transaction)),
+            },
+            u3::new(5),
+        );
+        let result = Builder::builder().interface(interface).build().connect();
+        assert!(matches!(
+            result,
+            Err(DeviceError::Interface(error)) if error == injected_failure(transaction)
+        ));
+        bus.done();
+    }
+}
+
+#[test]
+fn test_spi_register_and_configuration_operations_forward_owned_errors() {
+    for operation in 0..3 {
+        let mut bus = Mock::new(&initialization(5));
+        let mut device = MCP23S17::new_spi(
+            FailingSpi {
+                bus: bus.clone(),
+                transactions_before_failure: 3,
+                failure: Some(injected_failure(3)),
+            },
+            u3::new(5),
+        )
+        .unwrap();
+        let result = match operation {
+            0 => device
+                .read_register::<InterruptCapture>(Port::B)
+                .map(|_| ()),
+            1 => device.write_register(Port::B, OutputLatch::from(0x81)),
+            _ => device.write_configuration(Configuration::from(0x0c)),
+        };
+        assert_eq!(result, Err(DeviceError::Interface(injected_failure(3))));
+        bus.done();
+    }
 }

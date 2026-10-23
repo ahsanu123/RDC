@@ -48,3 +48,19 @@ happened; the method returns an error, never a partially successful value.
 There are no retries, CRC, arithmetic approximations, async API, software reset,
 or per-pin HAL adapters. `SpiDevice` handles CS and bus sharing; an
 `embedded-hal-bus` adapter can be supplied by the application.
+
+## Error propagation
+
+All fallible device methods and `Builder::connect` return
+`DeviceError<I::Error>`. Every failed interface initialization, read or write is
+wrapped as `DeviceError::Interface(original_error)` without discarding or
+replacing its payload. Multi-step operations return immediately on failure,
+including failures after earlier writes or interrupt acknowledgements.
+
+Configuration validation reports `UnsupportedRegisterBank`,
+`ReservedConfigurationBitSet`, or `HardwareAddressingDisabled`, in that order
+if several conditions are invalid. Selecting input direction for MCP23017 pin 7
+reports `UnsupportedInputPin`. Invalid configuration writes and unsupported
+direction requests are rejected before bus I/O. Constructor validation follows
+initialization and configuration readback. Optional logging never substitutes
+for an error return.

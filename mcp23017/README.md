@@ -10,9 +10,9 @@ reports initialization, invalid configurations and bus failures.
 
 ```rust
 use embedded_hal::i2c::I2c;
-use mcp23017::{u3, Direction, Error, MCP23017, Pin, Port};
+use mcp23017::{u3, DeviceError, Direction, MCP23017, Pin, Port};
 
-fn example<I: I2c>(i2c: I) -> Result<(), Error<I::Error>> {
+fn example<I: I2c>(i2c: I) -> Result<(), DeviceError<I::Error>> {
     // Address pins A2:A0 = 000 => I2C address 0x20.
     let mut device = MCP23017::new_i2c(i2c, u3::new(0))?;
     device.set_output(Port::A, Pin::P0, true)?;
@@ -31,9 +31,9 @@ bare `SpiBus`. Use a clock within the datasheet limit for your supply voltage.
 
 ```rust
 use embedded_hal::spi::SpiDevice;
-use mcp23017::{u3, Error, MCP23S17};
+use mcp23017::{u3, DeviceError, MCP23S17};
 
-fn example<S: SpiDevice<u8>>(spi: S) -> Result<(), Error<S::Error>> {
+fn example<S: SpiDevice<u8>>(spi: S) -> Result<(), DeviceError<S::Error>> {
     let mut device = MCP23S17::new_spi(spi, u3::new(5))?;
     device.write_outputs(0x1234)?;
     Ok(())
@@ -46,10 +46,10 @@ fn example<S: SpiDevice<u8>>(spi: S) -> Result<(), Error<S::Error>> {
 use embedded_hal::i2c::I2c;
 use mcp23017::{
     builder::Builder, comproc::I2cInterface,
-    register::{Configuration, InputDirection}, u3, Direction, Error, Port,
+    register::{Configuration, InputDirection}, u3, DeviceError, Direction, Port,
 };
 
-fn example<I: I2c>(i2c: I) -> Result<(), Error<I::Error>> {
+fn example<I: I2c>(i2c: I) -> Result<(), DeviceError<I::Error>> {
     let mut device = Builder::builder()
         .interface(I2cInterface::new(i2c, u3::new(2)))
         .build()
@@ -96,6 +96,31 @@ addresses. `Pin` restricts pin indices to 0-7 within the selected `Port`.
 
 See [REGISTERS.md](REGISTERS.md) for every address, field and read requirement,
 and [FUNCTIONS.md](FUNCTIONS.md) for processing and device operations.
+
+## Device errors
+
+Every fallible device operation, including constructors and builder connections,
+returns `DeviceError<I::Error>`, defined in `error.rs` and exported at the crate
+root. `Error<E>` remains a short alias for the same enum.
+
+| Variant | Meaning |
+|---|---|
+| `Interface(error)` | Original HAL interface error, including any device-specific payload owned by that error. |
+| `UnsupportedRegisterBank` | IOCON requests BANK=1 instead of the supported BANK=0 map. |
+| `ReservedConfigurationBitSet` | IOCON's unimplemented bit is set. |
+| `HardwareAddressingDisabled` | MCP23S17 hardware addressing is disabled. |
+| `UnsupportedInputPin` | MCP23017 GPA7 or GPB7 was requested as an input. |
+
+Interface failures are forwarded unchanged, not reduced to `ErrorKind`, replaced
+with a configuration error, logged and discarded, or converted to success.
+Optional `defmt` logging supplements error returns; it never replaces them.
+`From<I::Error>` wraps the original value as `DeviceError::Interface(error)`.
+When multiple configuration bits are invalid, validation reports BANK first,
+then the reserved bit, then disabled SPI addressing, before performing writes.
+
+Code matching the previous `Error::Bus(error)` variant should now match
+`DeviceError::Interface(error)`. The former generic `InvalidConfiguration` is
+replaced by the three specific configuration variants above.
 
 ## Validation
 

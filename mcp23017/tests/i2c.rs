@@ -1,7 +1,7 @@
 use embedded_hal::i2c::{ErrorKind, NoAcknowledgeSource};
 use embedded_hal_mock::eh1::i2c::{Mock, Transaction};
 use mcp23017::{
-    Direction, Error, MCP23017, Pin, Port,
+    DeviceError, Direction, MCP23017, Pin, Port,
     builder::Builder,
     comproc::I2cInterface,
     register::{
@@ -197,10 +197,14 @@ fn test_configuration_rejects_unsafe_bits_without_bus_writes() {
     let expectations = [Transaction::write_read(0x20, vec![0x0a], vec![0])];
     let mut bus = Mock::new(&expectations);
     let mut device = connected(bus.clone());
-    for invalid in [0x80, 0x01, 0x81] {
+    for (invalid, expected) in [
+        (0x80, DeviceError::UnsupportedRegisterBank),
+        (0x01, DeviceError::ReservedConfigurationBitSet),
+        (0x81, DeviceError::UnsupportedRegisterBank),
+    ] {
         assert_eq!(
             device.write_configuration(Configuration::from(invalid)),
-            Err(Error::InvalidConfiguration)
+            Err(expected)
         );
     }
     bus.done();
@@ -224,12 +228,22 @@ fn test_configuration_preserves_interrupt_and_interface_settings() {
 fn test_connection_propagates_read_error() {
     let failure = ErrorKind::NoAcknowledge(NoAcknowledgeSource::Address);
     let expectations = [Transaction::write_read(0x20, vec![0x0a], vec![0]).with_error(failure)];
-    let mut bus = Mock::new(&expectations);
-    assert!(matches!(
-        MCP23017::new_i2c(bus.clone(), u3::new(0)),
-        Err(Error::Bus(error)) if error == failure
-    ));
-    bus.done();
+    for use_builder in [false, true] {
+        let mut bus = Mock::new(&expectations);
+        let result = if use_builder {
+            Builder::builder()
+                .interface(I2cInterface::new(bus.clone(), u3::new(0)))
+                .build()
+                .connect()
+        } else {
+            MCP23017::new_i2c(bus.clone(), u3::new(0))
+        };
+        assert!(matches!(
+            result,
+            Err(DeviceError::Interface(error)) if error == failure
+        ));
+        bus.done();
+    }
 }
 
 #[test]
@@ -241,7 +255,7 @@ fn test_failed_update_read_does_not_write() {
     let mut bus = Mock::new(&expectations);
     assert_eq!(
         connected(bus.clone()).set_output(Port::A, Pin::P0, true),
-        Err(Error::Bus(ErrorKind::Bus))
+        Err(DeviceError::Interface(ErrorKind::Bus))
     );
     bus.done();
 }
@@ -259,7 +273,7 @@ fn test_failed_update_write_is_returned_and_next_update_rereads_hardware() {
     let mut device = connected(bus.clone());
     assert_eq!(
         device.set_output(Port::A, Pin::P0, true),
-        Err(Error::Bus(ErrorKind::Bus))
+        Err(DeviceError::Interface(ErrorKind::Bus))
     );
     device.set_output(Port::A, Pin::P1, true).unwrap();
     bus.done();
@@ -275,7 +289,7 @@ fn test_combined_read_returns_error_instead_of_partial_value() {
     let mut bus = Mock::new(&expectations);
     assert_eq!(
         connected(bus.clone()).read_capture(),
-        Err(Error::Bus(ErrorKind::Bus))
+        Err(DeviceError::Interface(ErrorKind::Bus))
     );
     bus.done();
 }
@@ -289,7 +303,7 @@ fn test_combined_write_stops_after_first_failure() {
     let mut bus = Mock::new(&expectations);
     assert_eq!(
         connected(bus.clone()).write_outputs(0x1234),
-        Err(Error::Bus(ErrorKind::Bus))
+        Err(DeviceError::Interface(ErrorKind::Bus))
     );
     bus.done();
 }
@@ -304,7 +318,7 @@ fn test_combined_write_reports_failure_after_port_a_is_written() {
     let mut bus = Mock::new(&expectations);
     assert_eq!(
         connected(bus.clone()).write_outputs(0x1234),
-        Err(Error::Bus(ErrorKind::Bus))
+        Err(DeviceError::Interface(ErrorKind::Bus))
     );
     bus.done();
 }
@@ -317,8 +331,43 @@ fn test_i2c_rejects_input_direction_on_output_only_pins_without_io() {
     for port in [Port::A, Port::B] {
         assert_eq!(
             device.set_direction(port, Pin::P7, Direction::Input),
-            Err(Error::UnsupportedInputPin)
+            Err(DeviceError::UnsupportedInputPin)
         );
     }
+    bus.done();
+}
+
+#[test]
+fn test_connection_returns_specific_configuration_error() {
+    for (configuration, expected) in [
+        (0x80, DeviceError::UnsupportedRegisterBank),
+        (0x01, DeviceError::ReservedConfigurationBitSet),
+    ] {
+        let expectations = [Transaction::write_read(
+            0x20,
+            vec![0x0a],
+            vec![configuration],
+        )];
+        let mut bus = Mock::new(&expectations);
+        assert!(matches!(
+            MCP23017::new_i2c(bus.clone(), u3::new(0)),
+            Err(error) if error == expected
+        ));
+        bus.done();
+    }
+}
+
+#[test]
+fn test_configuration_write_forwards_interface_error() {
+    let failure = ErrorKind::NoAcknowledge(NoAcknowledgeSource::Data);
+    let expectations = [
+        Transaction::write_read(0x20, vec![0x0a], vec![0]),
+        Transaction::write(0x20, vec![0x0a, 0x04]).with_error(failure),
+    ];
+    let mut bus = Mock::new(&expectations);
+    assert_eq!(
+        connected(bus.clone()).write_configuration(Configuration::from(0x04)),
+        Err(DeviceError::Interface(failure))
+    );
     bus.done();
 }

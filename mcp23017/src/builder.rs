@@ -2,10 +2,7 @@
 
 use typed_builder::TypedBuilder;
 
-use crate::{
-    comproc::Interface,
-    device::{Error, MCP23017},
-};
+use crate::{DeviceError, comproc::Interface, device::MCP23017};
 
 /// Build a connection, then initialize it with [`Self::connect`].
 ///
@@ -20,7 +17,7 @@ pub struct Builder<I> {
 impl<I: Interface> Builder<I> {
     /// Connect after hardware reset/power-on. SPI startup enables addressing
     /// on all reset MCP23S17s sharing this device's CS.
-    pub fn connect(self) -> Result<MCP23017<I>, Error<I::Error>> {
+    pub fn connect(self) -> Result<MCP23017<I>, DeviceError<I::Error>> {
         MCP23017::connect(self.interface)
     }
 }
