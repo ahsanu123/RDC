@@ -296,6 +296,18 @@ fn measurement_timeout_is_bounded_and_requires_reinitialization() {
 }
 
 #[test]
+fn otp_reload_checks_otp_completion_instead_of_measurement_completion() {
+    let mut transactions = startup();
+    transactions.extend([write(0x09, 0x40), read(0x08, &[3]), read(0x08, &[0x10])]);
+    let mut sensor = device(&transactions);
+    let mut delay = Delay::default();
+    sensor.initialize(&mut delay).unwrap();
+    sensor.reload_otp(&mut delay).unwrap();
+    assert_eq!(&delay.nanoseconds[3..], &[10_000_000, 1_000_000, 1_000_000]);
+    done(sensor);
+}
+
+#[test]
 fn acquisition_forwards_each_failure_and_invalidates_uncertain_state() {
     for (command, address, output) in [
         (1, 0, vec![0x80, 0, 0x80, 0, 0x80, 0, 0]),
@@ -463,8 +475,10 @@ fn disabled_channels_and_automatic_set_reset_reject_incompatible_acquisition() {
     let mut sensor = device(&transactions);
     let mut delay = Delay::default();
     sensor.initialize(&mut delay).unwrap();
-    let mut configuration = Configuration::default();
-    configuration.control1 = 0x18.into();
+    let mut configuration = Configuration {
+        control1: 0x18.into(),
+        ..Configuration::default()
+    };
     sensor.configure(configuration, &mut delay).unwrap();
     assert_eq!(
         sensor.measure_magnetic_field(&mut delay),

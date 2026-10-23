@@ -41,8 +41,9 @@ writes only the requested W1C bits (never a read-modify-write of Status).
 YZ inhibit accepts 00 or 11; the other encodings are undocumented.
 
 Continuous mode requires a nonzero frequency. At 200 Hz BW must be 01; at
-1000 Hz BW must be 11. The driver also requires enough nominal measurement time
-for lower rates (8/4/2/0.5 ms at BW 00/01/10/11 respectively).
+1000 Hz BW must be 11. At 100 Hz the driver requires BW 01 or faster, using the
+page-2 maximum output rate for BW 00 (50 Hz). Lower rates accept any bandwidth.
+Nominal measurement times are 8/4/2/0.5 ms at BW 00/01/10/11 respectively.
 Periodic SET requires both continuous mode and auto S/R. Three-wire SPI requires
 half-duplex bus support not provided here and is rejected. Opposing test currents
 cannot be enabled simultaneously by this driver.
