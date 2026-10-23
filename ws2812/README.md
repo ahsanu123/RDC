@@ -173,6 +173,12 @@ cargo build --target thumbv7em-none-eabi --all-features
 
 Tests exercise exhaustive byte encoding, timing inequalities, GRB/MSB-first order,
 full-chain framing, caller storage preservation, empty input and original-error
-forwarding at each multi-step failure point. Hardware has not been tested:
+forwarding at each multi-step failure point. Tests, strict Clippy, rustdoc and
+`thumbv7em-none-eabi` builds passed in all four feature configurations: none,
+`async`, `defmt`, and both. There are 13 unit/integration tests without `async`,
+16 with it, plus two documentation tests in either configuration. Formatting
+also passed.
+
+Hardware has not been tested:
 electrical timing, level shifting, visible colors and async cancellation recovery
 require board-level validation.
