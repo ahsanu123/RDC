@@ -154,5 +154,8 @@ cargo build --target thumbv7em-none-eabi --all-features
 ```
 
 Mock tests cover wire framing, state preservation, conversion results and partial
-failures. Hardware has not been tested; electrical timing, continuous coherency,
-OTP reload timing and accuracy require board-level verification.
+failures. The commands above passed on the host and `thumbv7em-none-eabi`,
+both with and without `defmt` (22 unit/integration tests and two documentation
+tests in each feature configuration). Hardware has not been tested; electrical
+timing, continuous coherency, OTP reload timing and accuracy require board-level
+verification.
