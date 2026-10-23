@@ -246,6 +246,10 @@ preservation, auto-resealing and error injection at every transfer in all three
 configuration/sealing paths. A separate HAL implementation verifies custom
 error payload preservation. **No physical hardware has been tested.**
 
+Validation on 2026-10-23 passed all commands above: 22 unit/integration tests
+and 4 doctests in each feature configuration, warning-free Clippy and rustdoc,
+and `thumbv7em-none-eabi` builds with and without `defmt`.
+
 See [FUNCTIONS.md](FUNCTIONS.md) for method sequences and equations.
 
 ## References
