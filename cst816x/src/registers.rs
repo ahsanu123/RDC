@@ -4,14 +4,18 @@
 //! retained when decoding and modifying a register. Defaults are implemented
 //! only where the PDF specifies the complete byte's default.
 //!
-//! These types do not establish access permissions or perform bus transfers.
+//! These types do not establish access permissions. The private Register helper
+//! performs transfers using an I2C reference supplied by the owning device.
 //! Gesture and finger-count decoding is fallible for undocumented codes.
 
+mod access;
 mod auto_reset;
 mod auto_sleep_disable;
 mod auto_sleep_time;
+mod bpc0;
 mod bpc0_high;
 mod bpc0_low;
+mod bpc1;
 mod bpc1_high;
 mod bpc1_low;
 mod chip_identifier;
@@ -25,8 +29,10 @@ mod long_press_time;
 mod low_power_auto_wake_time;
 mod low_power_scan_current;
 mod low_power_scan_frequency;
+mod low_power_scan_raw1;
 mod low_power_scan_raw1_high;
 mod low_power_scan_raw1_low;
+mod low_power_scan_raw2;
 mod low_power_scan_raw2_high;
 mod low_power_scan_raw2_low;
 mod low_power_scan_threshold;
@@ -35,16 +41,21 @@ mod motion_mask;
 mod motion_sliding_angle;
 mod normal_scan_period;
 mod project_identifier;
+mod x_position;
 mod x_position_high;
 mod x_position_low;
+mod y_position;
 mod y_position_high;
 mod y_position_low;
 
+pub(crate) use access::Register;
 pub use auto_reset::AutoReset;
 pub use auto_sleep_disable::AutoSleepDisable;
 pub use auto_sleep_time::AutoSleepTime;
+pub use bpc0::Bpc0;
 pub use bpc0_high::Bpc0High;
 pub use bpc0_low::Bpc0Low;
+pub use bpc1::Bpc1;
 pub use bpc1_high::Bpc1High;
 pub use bpc1_low::Bpc1Low;
 pub use chip_identifier::ChipIdentifier;
@@ -58,8 +69,10 @@ pub use long_press_time::LongPressTime;
 pub use low_power_auto_wake_time::LowPowerAutoWakeTime;
 pub use low_power_scan_current::LowPowerScanCurrent;
 pub use low_power_scan_frequency::LowPowerScanFrequency;
+pub use low_power_scan_raw1::LowPowerScanRaw1;
 pub use low_power_scan_raw1_high::LowPowerScanRaw1High;
 pub use low_power_scan_raw1_low::LowPowerScanRaw1Low;
+pub use low_power_scan_raw2::LowPowerScanRaw2;
 pub use low_power_scan_raw2_high::LowPowerScanRaw2High;
 pub use low_power_scan_raw2_low::LowPowerScanRaw2Low;
 pub use low_power_scan_threshold::LowPowerScanThreshold;
@@ -68,8 +81,10 @@ pub use motion_mask::MotionMask;
 pub use motion_sliding_angle::MotionSlidingAngle;
 pub use normal_scan_period::NormalScanPeriod;
 pub use project_identifier::ProjectIdentifier;
+pub use x_position::XPosition;
 pub use x_position_high::XPositionHigh;
 pub use x_position_low::XPositionLow;
+pub use y_position::YPosition;
 pub use y_position_high::YPositionHigh;
 pub use y_position_low::YPositionLow;
 
@@ -168,4 +183,36 @@ register_metadata!(
     LongPressTime,
     IoControl,
     AutoSleepDisable,
+);
+
+macro_rules! combined_register_metadata {
+    ($($register:ident => $address:ident),+ $(,)?) => {
+        $(
+            impl $register {
+                /// Address of the high byte of this combined register.
+                pub const ADDRESS: Address = Address::$address;
+            }
+
+            #[cfg(feature = "defmt")]
+            impl defmt::Format for $register {
+                fn format(&self, formatter: defmt::Formatter) {
+                    defmt::write!(
+                        formatter,
+                        "{}({=u16:#x})",
+                        stringify!($register),
+                        u16::from(*self)
+                    );
+                }
+            }
+        )+
+    };
+}
+
+combined_register_metadata!(
+    XPosition => XPositionHigh,
+    YPosition => YPositionHigh,
+    Bpc0 => Bpc0High,
+    Bpc1 => Bpc1High,
+    LowPowerScanRaw1 => LowPowerScanRaw1High,
+    LowPowerScanRaw2 => LowPowerScanRaw2High,
 );

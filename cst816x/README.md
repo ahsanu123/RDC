@@ -6,12 +6,22 @@ compatibility with other CST816x variants. No document revision is stated.
 
 ## Library
 
-The `cst816` crate is `no_std` and exposes the register layer through
-`registers.rs`, with one bilge register type per file in `registers/`. It does not
-yet perform I2C transactions or device initialization.
+The `cst816` crate is `no_std`. `Cst816s`, implemented in `device.rs` and exported
+from the crate root, is the main user interface. It owns an embedded-hal 1.0 I2C
+instance and a private field named `register`. That stateless `Register` helper
+receives `&mut I2C` for every operation; it never owns or caches the bus.
+
+The register layer is exposed through `registers.rs`, with bilge register types
+in `registers/`. Device methods return or accept those typed values. The six
+high/low pairs are exposed only as combined operations: `XPosition`, `YPosition`,
+`Bpc0`, `Bpc1`, `LowPowerScanRaw1`, and `LowPowerScanRaw2`. Coordinate fields use
+`u12`, with the unspecified high nibble retained separately. The original byte
+types remain available for interpreting the PDF, but there are no public device
+methods to transfer individual halves or arbitrary register addresses.
 
 Each register type has an `ADDRESS` constant, typed field getters/setters, and
-conversion back to `u8`. `GestureIdentifier` and `FingerNumber` use `TryFrom<u8>`
+conversion back to `u8` (or `u16` for combined pairs).
+`GestureIdentifier` and `FingerNumber` use `TryFrom<u8>`
 to reject undocumented codes; other registers use `From<u8>` to retain raw
 values. Unspecified bits are preserved by field setters. Raw numeric settings
 represent the complete byte and do not enforce the documented operating ranges.
@@ -19,17 +29,36 @@ represent the complete byte and do not enforce the documented operating ranges.
 not as a guarantee of reset state. Enable `defmt` for register formatting.
 
 ```rust
-use bilge::prelude::u4;
-use cst816::registers::{Gesture, GestureIdentifier, XPositionHigh};
+use cst816::{Cst816s, Cst816sError, registers::InterruptPulseWidth};
+use embedded_hal::i2c::I2c;
 
-let gesture = GestureIdentifier::try_from(0x0B).unwrap();
-assert_eq!(gesture.gesture(), Gesture::DoubleClick);
-
-let mut x_high = XPositionHigh::from(0xA3);
-x_high.set_coordinate(u4::new(5));
-assert_eq!(u8::from(x_high), 0xA5);
-assert_eq!(XPositionHigh::ADDRESS as u8, 0x03);
+fn read_touch_x<I: I2c>(i2c: I) -> Result<(I, u16), Cst816sError<I::Error>> {
+    let mut device = Cst816s::new(i2c);
+    let x = device.read_x_position()?.coordinate().value();
+    device.write_interrupt_pulse_width(InterruptPulseWidth::default())?;
+    Ok((device.release(), x))
+}
 ```
+
+### Device method groups
+
+The `read_` / `write_` prefixes below denote separate methods, not a bulk
+read-all snapshot. Every declared address is covered by a read method.
+
+| Group | Method suffixes | Access exposed by the device |
+|-------|-----------------|------------------------------|
+| Touch output | `gesture_identifier`, `finger_number`, `x_position`, `y_position` | `read_` only |
+| Identity | `chip_identifier`, `project_identifier`, `firmware_version` | `read_` only |
+| Combined calibration/reference values | `bpc0`, `bpc1`, `low_power_scan_raw1`, `low_power_scan_raw2` | `read_` and `write_` |
+| Gesture configuration | `motion_mask`, `motion_sliding_angle` | `read_` and `write_` |
+| Interrupt configuration | `interrupt_pulse_width`, `interrupt_control` | `read_` and `write_` |
+| Scanning configuration | `normal_scan_period`, `low_power_auto_wake_time`, `low_power_scan_threshold`, `low_power_scan_window`, `low_power_scan_frequency`, `low_power_scan_current` | `read_` and `write_` |
+| Power/reset and I/O configuration | `auto_sleep_time`, `auto_reset`, `long_press_time`, `io_control`, `auto_sleep_disable` | `read_` and `write_` |
+
+These are low-level register operations, not confirmation of undocumented write
+permissions. In particular, BPC values are not explained by the PDF; verify their
+writability and purpose before writing them. Touch and identity registers are
+treated as outputs and intentionally have no device write methods.
 
 ## Registers
 
