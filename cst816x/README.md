@@ -1,0 +1,120 @@
+# CST816x register reference
+
+Source: [`docs/CST816S_register_declaration.pdf`](docs/CST816S_register_declaration.pdf),
+pages 1-5. The supplied document describes **CST816S**; it does not establish
+compatibility with other CST816x variants. No document revision is stated.
+
+## Library
+
+The `cst816` crate is `no_std` and exposes the register layer through
+`registers.rs`, with one bilge register type per file in `registers/`. It does not
+yet perform I2C transactions or device initialization.
+
+Each register type has an `ADDRESS` constant, typed field getters/setters, and
+conversion back to `u8`. `GestureIdentifier` and `FingerNumber` use `TryFrom<u8>`
+to reject undocumented codes; other registers use `From<u8>` to retain raw
+values. Unspecified bits are preserved by field setters. Raw numeric settings
+represent the complete byte and do not enforce the documented operating ranges.
+`Default` is provided only for registers with a fully documented byte default,
+not as a guarantee of reset state. Enable `defmt` for register formatting.
+
+```rust
+use bilge::prelude::u4;
+use cst816::registers::{Gesture, GestureIdentifier, XPositionHigh};
+
+let gesture = GestureIdentifier::try_from(0x0B).unwrap();
+assert_eq!(gesture.gesture(), Gesture::DoubleClick);
+
+let mut x_high = XPositionHigh::from(0xA3);
+x_high.set_coordinate(u4::new(5));
+assert_eq!(u8::from(x_high), 0xA5);
+assert_eq!(XPositionHigh::ADDRESS as u8, 0x03);
+```
+
+## Registers
+
+The table lists all 32 registers declared in the PDF, ordered by address. Each
+register is one byte. Bit ranges below identify only documented fields; other
+bits are unspecified, not confirmed reserved.
+
+**Access and read requirements:** The PDF does not specify read/write permissions,
+bus transaction framing, read prerequisites, or read side effects for these
+registers. Do not assume that reading clears status or that writes to unspecified
+bits are safe. Confirm those requirements against the applicable device's
+interface documentation before implementing access.
+
+**Defaults and byte order:** Values below are documented defaults, not guaranteed
+reset values; the PDF does not separately specify reset values. For paired values,
+the lower address holds the high byte and the next address holds the low byte.
+The PDF does not specify whether multi-byte reads are atomic.
+
+| Address | Register (PDF name) | Bits / fields | Description, units, and range | Documented default | PDF page |
+|---------|---------------------|---------------|-------------------------------|--------------------|----------|
+| `0x01` | `GestureID` | `[7:0] GestureID` | Detected gesture; see gesture table below. | Not stated | 1 |
+| `0x02` | `FingerNum` | `[7:0] FingerNum` | Finger count: `0` = no finger, `1` = one finger. | Not stated | 1 |
+| `0x03` | `XposH` | `[3:0] Xpos[11:8]` | High four bits of the X coordinate. | Not stated | 1 |
+| `0x04` | `XposL` | `[7:0] Xpos[7:0]` | Low eight bits of the X coordinate. | Not stated | 1 |
+| `0x05` | `YposH` | `[3:0] Ypos[11:8]` | High four bits of the Y coordinate. | Not stated | 1 |
+| `0x06` | `YposL` | `[7:0] Ypos[7:0]` | Low eight bits of the Y coordinate. | Not stated | 1 |
+| `0xA7` | `ChipID` | `[7:0] ChipID` | Chip identifier; no expected ID value is supplied. | Not stated | 2 |
+| `0xA8` | `ProjID` | `[7:0] ProjID` | Project identifier. | Not stated | 2 |
+| `0xA9` | `FwVersion` | `[7:0] FwVersion` | Software version. | Not stated | 2 |
+| `0xB0` | `BPC0H` | `[7:0] BPC0[15:8]` | High byte of BPC0; the PDF does not explain BPC0's meaning. | Not stated | 1-2 |
+| `0xB1` | `BPC0L` | `[7:0] BPC0[7:0]` | Low byte of BPC0. | Not stated | 2 |
+| `0xB2` | `BPC1H` | `[7:0] BPC1[15:8]` | High byte of BPC1; the PDF does not explain BPC1's meaning. | Not stated | 2 |
+| `0xB3` | `BPC1L` | `[7:0] BPC1[7:0]` | Low byte of BPC1. | Not stated | 2 |
+| `0xEC` | `MotionMask` | `[2] EnConLR`, `[1] EnConUD`, `[0] EnDClick` | Enable continuous left/right scrolling, continuous up/down scrolling, and double-click actions, respectively. | Not stated | 2 |
+| `0xED` | `IrqPluseWidth` | `[7:0] IrqPluseWidth` | Interrupt low-pulse width; unit: 0.1 ms; range: 1-200 (0.1-20 ms). Name preserves the PDF spelling. | `10` (1 ms) | 3 |
+| `0xEE` | `NorScanPer` | `[7:0] NorScanPer` | Normal quick-scanning period; unit: 10 ms; range: 1-30 (10-300 ms). Affects `LpAutoWakeTime` and `AutoSleepTime`; the relationship is not specified. | `1` (10 ms) | 3 |
+| `0xEF` | `MotionSlAngle` | `[7:0] MotionSlAngle` | Gesture sliding-area angle control. PDF equation: `Angle = tan(c) * 10`, where `c` is the angle relative to the positive X axis; angle units and rounding are not specified. | Not stated | 3 |
+| `0xF0` | `LpScanRaw1H` | `[7:0] LpScanRaw1H` | High byte of the low-power scanning channel 1 reference value. | Not stated | 3 |
+| `0xF1` | `LpScanRaw1L` | `[7:0] LpScanRaw1L` | Low byte of the low-power scanning channel 1 reference value. | Not stated | 3 |
+| `0xF2` | `LpScanRaw2H` | `[7:0] LpScanRaw2H` | High byte of the low-power scanning channel 2 reference value. | Not stated | 3 |
+| `0xF3` | `LpScanRaw2L` | `[7:0] LpScanRaw2L` | Low byte of the low-power scanning channel 2 reference value. | Not stated | 3 |
+| `0xF4` | `LpAutoWakeTime` | `[7:0] LpAutoWakeTime` | Automatic recalibration period in low-power mode; unit: 1 minute; range: 1-5. | `5` (5 minutes) | 3-4 |
+| `0xF5` | `LpScanTH` | `[7:0] LpScanTH` | Low-power scanning wake-up threshold; smaller values increase sensitivity; range: 1-255. | `48` | 4 |
+| `0xF6` | `LpScanWin` | `[7:0] LpScanWin` | Low-power scanning measurement range; larger values increase sensitivity and power consumption; allowed values: 0, 1, 2, 3. | `3` | 4 |
+| `0xF7` | `LpScanFreq` | `[7:0] LpScanFreq` | Low-power scanning frequency setting; smaller values increase sensitivity; range: 1-255. No frequency unit is stated. | `7` | 4 |
+| `0xF8` | `LpScanIdac` | `[7:0] LpScanIdac` | Low-power scanning current setting; smaller values increase sensitivity; range: 1-255. No current unit is stated. | Not stated | 4 |
+| `0xF9` | `AutoSleepTime` | `[7:0] AutoSleepTime` | Enter low-power mode after this many seconds without touch; unit: 1 second. | `2` (2 seconds) | 4 |
+| `0xFA` | `IrqCtl` | `[7] EnTest`, `[6] EnTouch`, `[5] EnChange`, `[4] EnMotion`, `[0] OnceWLP` | Interrupt controls according to the field descriptions; see details and the source inconsistency below. | Not stated | 4-5 |
+| `0xFB` | `AutoReset` | `[7:0] DebounceTime` | Automatically reset if touch persists without a valid gesture for this many seconds; unit: 1 second; `0` disables. | Not stated (PDF leaves it blank) | 5 |
+| `0xFC` | `LongPressTime` | `[7:0] LongPressTime` | Automatically reset after a long press lasting this many seconds; unit: 1 second; `0` disables. | `10` (10 seconds) | 5 |
+| `0xFD` | `IOCtl` | `[2] SOFT_RST`, `[1] IIC_OD`, `[0] En1v8` | IRQ-driven soft-reset enable, I2C pin driver mode, and I2C/IRQ voltage selection; see field table below. | I2C pull-up mode and VDD level; soft-reset default not stated | 5 |
+| `0xFE` | `DisAutoSleep` | `[7:0] DisAutoSleep` | `0` enables automatic entry into low-power mode; any nonzero value disables it. | `0` | 5 |
+
+### Gesture IDs (`0x01`)
+
+| Value | Gesture |
+|-------|---------|
+| `0x00` | No gesture |
+| `0x01` | Slide up |
+| `0x02` | Slide down |
+| `0x03` | Slide left |
+| `0x04` | Slide right |
+| `0x05` | Single click |
+| `0x0B` | Double click |
+| `0x0C` | Long press |
+
+### Interrupt control (`0xFA`)
+
+| Bit | Field | Meaning when enabled |
+|-----|-------|----------------------|
+| 7 | `EnTest` | Periodically generate low pulses on the interrupt pin for testing. |
+| 6 | `EnTouch` | Generate low pulses when touch is detected. |
+| 5 | `EnChange` | Generate low pulses when touch changes. |
+| 4 | `EnMotion` | Generate low pulses when a gesture is detected. |
+| 0 | `OnceWLP` | Generate only one low pulse for a long-press gesture. |
+
+**Source inconsistency:** The `IrqCtl` bit-layout drawing on page 4 places
+`OnceWLP` under bit 4 and omits `EnMotion`. The field descriptions on pages 4-5
+instead assign `EnMotion` to bit 4 and `OnceWLP` to bit 0. The tables above follow
+the field descriptions; verify this mapping before configuring hardware.
+
+### I/O control (`0xFD`)
+
+| Bit | Field | Value `0` | Value `1` | Documented default |
+|-----|-------|-----------|-----------|--------------------|
+| 2 | `SOFT_RST` | Disable soft reset through IRQ. | Enable soft reset by having the main controller pull IRQ low. | Not stated |
+| 1 | `IIC_OD` | I2C pin pull-up resistor mode. | I2C pin open-drain mode. | `0` |
+| 0 | `En1v8` | I2C and IRQ levels follow VDD. | I2C and IRQ levels use 1.8 V. | `0` |
