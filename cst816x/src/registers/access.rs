@@ -1,7 +1,6 @@
-use embedded_hal::i2c::I2c;
-
 use super::*;
 use crate::{comproc, error::Cst816sError};
+use embedded_hal::i2c::I2c;
 
 /// Stateless register access; the caller owns and lends the bus for each method.
 pub(crate) struct Register;
@@ -11,8 +10,9 @@ macro_rules! read_byte {
         pub(crate) fn $method<I: I2c>(
             &self,
             i2c: &mut I,
+            device_address: u8,
         ) -> Result<$register, Cst816sError<I::Error>> {
-            comproc::read(i2c, $register::ADDRESS).map(Into::into)
+            comproc::read(i2c, device_address, $register::ADDRESS).map(Into::into)
         }
     };
 }
@@ -22,8 +22,9 @@ macro_rules! read_checked_byte {
         pub(crate) fn $method<I: I2c>(
             &self,
             i2c: &mut I,
+            device_address: u8,
         ) -> Result<$register, Cst816sError<I::Error>> {
-            let value = comproc::read(i2c, $register::ADDRESS)?;
+            let value = comproc::read(i2c, device_address, $register::ADDRESS)?;
             $register::try_from(value).map_err(|_| Cst816sError::InvalidRegisterValue {
                 address: $register::ADDRESS,
                 value,
@@ -37,9 +38,10 @@ macro_rules! write_byte {
         pub(crate) fn $method<I: I2c>(
             &self,
             i2c: &mut I,
+            device_address: u8,
             value: $register,
         ) -> Result<(), Cst816sError<I::Error>> {
-            comproc::write(i2c, $register::ADDRESS, value.into())
+            comproc::write(i2c, device_address, $register::ADDRESS, value.into())
         }
     };
 }
@@ -49,11 +51,12 @@ macro_rules! write_masked_byte {
         pub(crate) fn $method<I: I2c>(
             &self,
             i2c: &mut I,
+            device_address: u8,
             value: $register,
         ) -> Result<(), Cst816sError<I::Error>> {
-            let current = comproc::read(i2c, $register::ADDRESS)?;
+            let current = comproc::read(i2c, device_address, $register::ADDRESS)?;
             let updated = (current & !$mask) | (u8::from(value) & $mask);
-            comproc::write(i2c, $register::ADDRESS, updated)
+            comproc::write(i2c, device_address, $register::ADDRESS, updated)
         }
     };
 }
@@ -63,9 +66,10 @@ macro_rules! read_pair {
         pub(crate) fn $method<I: I2c>(
             &self,
             i2c: &mut I,
+            device_address: u8,
         ) -> Result<$register, Cst816sError<I::Error>> {
-            let high = comproc::read(i2c, Address::$high)?;
-            let low = comproc::read(i2c, Address::$low)?;
+            let high = comproc::read(i2c, device_address, Address::$high)?;
+            let low = comproc::read(i2c, device_address, Address::$low)?;
             Ok(u16::from_be_bytes([high, low]).into())
         }
     };
@@ -76,11 +80,12 @@ macro_rules! write_pair {
         pub(crate) fn $method<I: I2c>(
             &self,
             i2c: &mut I,
+            device_address: u8,
             value: $register,
         ) -> Result<(), Cst816sError<I::Error>> {
             let [high, low] = u16::from(value).to_be_bytes();
-            comproc::write(i2c, Address::$high, high)?;
-            comproc::write(i2c, Address::$low, low)
+            comproc::write(i2c, device_address, Address::$high, high)?;
+            comproc::write(i2c, device_address, Address::$low, low)
         }
     };
 }

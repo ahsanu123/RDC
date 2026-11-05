@@ -8,16 +8,17 @@ use crate::{comproc, error::Cst816sError, registers::*};
 /// Construction does not reset, wake, configure, or communicate with the device.
 ///
 /// ```
-/// use cst816::{Cst816s, Cst816sError};
+/// use cst816::{Cst816x, Cst816sError};
 /// use embedded_hal::i2c::I2c;
 ///
 /// fn read_x<I: I2c>(i2c: I) -> Result<(I, u16), Cst816sError<I::Error>> {
-///     let mut device = Cst816s::new(i2c);
+///     let mut device = Cst816x::new(i2c);
 ///     let x = device.read_x_position()?.coordinate().value();
 ///     Ok((device.release(), x))
 /// }
 /// ```
 pub struct Cst816x<I2C> {
+    addr: u8,
     i2c: I2C,
     register: Register,
 }
@@ -26,7 +27,7 @@ macro_rules! read_register {
     ($method:ident, $register:ident) => {
         #[doc = concat!("Read [`", stringify!($register), "`].")]
         pub fn $method(&mut self) -> Result<$register, Cst816sError<I::Error>> {
-            self.register.$method(&mut self.i2c)
+            self.register.$method(&mut self.i2c, self.addr)
         }
     };
 }
@@ -38,19 +39,29 @@ macro_rules! write_register {
                     "`]. See the device README for preservation and partial-failure semantics."
                 )]
         pub fn $method(&mut self, value: $register) -> Result<(), Cst816sError<I::Error>> {
-            self.register.$method(&mut self.i2c, value)
+            self.register.$method(&mut self.i2c, self.addr, value)
         }
     };
 }
 
 impl<I: I2c> Cst816x<I> {
-    /// Seven-bit I2C address (not the shifted wire address).
-    pub const I2C_ADDRESS: u8 = comproc::I2C_ADDRESS;
-
-    /// Wrap an already powered, reset, and ready device without bus activity.
+    /// Wrap a ready device at the default seven-bit address, 0x15, without I/O.
     pub fn new(i2c: I) -> Self {
         Self {
             i2c,
+            register: Register,
+            addr: comproc::I2C_ADDRESS,
+        }
+    }
+
+    /// Wrap a ready device at a custom seven-bit address without I/O.
+    ///
+    /// Supply an unshifted address in 0x00-0x7F, not an eight-bit wire address.
+    /// This selects the destination for transfers; it does not reprogram the IC.
+    pub fn with_address(i2c: I, addr: u8) -> Self {
+        Self {
+            i2c,
+            addr,
             register: Register,
         }
     }

@@ -6,10 +6,16 @@ compatibility with other CST816x variants. No document revision is stated.
 
 ## Library
 
-The `cst816` crate is `no_std`. `Cst816s`, implemented in `device.rs` and exported
+The `cst816` crate is `no_std`. `Cst816x`, implemented in `device.rs` and exported
 from the crate root, is the main user interface. It owns an embedded-hal 1.0 I2C
 instance and a private field named `register`. That stateless `Register` helper
 receives `&mut I2C` for every operation; it never owns or caches the bus.
+
+`Cst816x::new(i2c)` uses the default seven-bit address `0x15`.
+`Cst816x::with_address(i2c, address)` selects a custom unshifted seven-bit address
+for every read and write, including both halves of a combined register and both
+steps of read-modify-write operations. It does not change the device's hardware
+address. The I2C implementation only needs embedded-hal's `I2c` trait.
 
 The register layer is exposed through `registers.rs`, with bilge register types
 in `registers/`. Device methods return or accept those typed values. The six
@@ -29,11 +35,11 @@ represent the complete byte and do not enforce the documented operating ranges.
 not as a guarantee of reset state. Enable `defmt` for register formatting.
 
 ```rust
-use cst816::{Cst816s, Cst816sError, registers::InterruptPulseWidth};
+use cst816::{Cst816x, Cst816sError, registers::InterruptPulseWidth};
 use embedded_hal::i2c::I2c;
 
 fn read_touch_x<I: I2c>(i2c: I) -> Result<(I, u16), Cst816sError<I::Error>> {
-    let mut device = Cst816s::new(i2c);
+    let mut device = Cst816x::new(i2c);
     let x = device.read_x_position()?.coordinate().value();
     device.write_interrupt_pulse_width(InterruptPulseWidth::default())?;
     Ok((device.release(), x))

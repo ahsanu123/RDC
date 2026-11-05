@@ -11,11 +11,15 @@ enum Step {
 }
 
 #[derive(Clone)]
-struct MockI2c(Rc<RefCell<VecDeque<Step>>>);
+struct MockI2c(Rc<RefCell<VecDeque<Step>>>, u8);
 
 impl MockI2c {
     fn new(steps: Vec<Step>) -> Self {
-        Self(Rc::new(RefCell::new(steps.into())))
+        Self::with_address(0x15, steps)
+    }
+
+    fn with_address(address: u8, steps: Vec<Step>) -> Self {
+        Self(Rc::new(RefCell::new(steps.into())), address)
     }
 
     fn done(&self) {
@@ -33,7 +37,10 @@ impl I2c for MockI2c {
         address: u8,
         operations: &mut [Operation<'_>],
     ) -> Result<(), Self::Error> {
-        assert_eq!(address, 0x15, "expected the seven-bit slave address");
+        assert_eq!(
+            address, self.1,
+            "expected the configured seven-bit slave address"
+        );
         let step = self
             .0
             .borrow_mut()
@@ -230,6 +237,42 @@ fn device_writes_configuration_and_combined_pairs_with_correct_framing() {
 }
 
 #[test]
+fn device_custom_address_is_used_by_every_transfer_pattern() {
+    let bus = MockI2c::with_address(
+        0x2A,
+        vec![
+            Step::Read(0xA7, 0xB4),
+            Step::Read(0x01, 0x0B),
+            Step::Read(0x03, 0xA1),
+            Step::Read(0x04, 0x23),
+            Step::Write(0xED, 27),
+            Step::Read(0xEC, 0xF8),
+            Step::Write(0xEC, 0xFD),
+            Step::Write(0xF0, 0x89),
+            Step::Write(0xF1, 0xAB),
+        ],
+    );
+    let mut device = Cst816x::with_address(bus.clone(), 0x2A);
+    assert_eq!(u8::from(device.read_chip_identifier().unwrap()), 0xB4);
+    assert_eq!(
+        device.read_gesture_identifier().unwrap().gesture(),
+        Gesture::DoubleClick
+    );
+    assert_eq!(
+        device.read_x_position().unwrap().coordinate().value(),
+        0x123
+    );
+    device
+        .write_interrupt_pulse_width(InterruptPulseWidth::from(27))
+        .unwrap();
+    device.write_motion_mask(MotionMask::from(0x05)).unwrap();
+    device
+        .write_low_power_scan_raw1(LowPowerScanRaw1::from(0x89AB))
+        .unwrap();
+    bus.done();
+}
+
+#[test]
 fn device_masked_writes_preserve_current_hardware_unspecified_bits() {
     for current in u8::MIN..=u8::MAX {
         let bus = MockI2c::new(vec![
@@ -264,7 +307,7 @@ fn device_pair_reads_forward_either_transfer_failure_without_a_partial_result() 
                     ]
                 };
                 let bus = MockI2c::new(steps);
-                let mut device = Cst816s::new(bus.clone());
+                let mut device = Cst816x::new(bus.clone());
                 assert_eq!(
                     device.$method(),
                     Err(Cst816sError::Interface(ErrorKind::Bus))
@@ -295,7 +338,7 @@ fn device_pair_writes_stop_on_failure_without_retry_or_rollback() {
                     ]
                 };
                 let bus = MockI2c::new(steps);
-                let mut device = Cst816s::new(bus.clone());
+                let mut device = Cst816x::new(bus.clone());
                 assert_eq!(
                     device.$method($register::from(0x1234)),
                     Err(Cst816sError::Interface(ErrorKind::Bus))
@@ -324,7 +367,7 @@ fn device_masked_writes_forward_read_and_write_failures() {
                     ]
                 };
                 let bus = MockI2c::new(steps);
-                let mut device = Cst816s::new(bus.clone());
+                let mut device = Cst816x::new(bus.clone());
                 assert_eq!(
                     device.$method($register::from($value)),
                     Err(Cst816sError::Interface(ErrorKind::Bus))
@@ -387,5 +430,10 @@ fn device_construction_and_release_do_not_access_the_bus() {
     let bus = MockI2c::new(vec![]);
     let returned = Cst816x::new(bus.clone()).release();
     assert!(Rc::ptr_eq(&bus.0, &returned.0));
+    returned.done();
+
+    let custom_bus = MockI2c::with_address(0x2A, vec![]);
+    let returned = Cst816x::with_address(custom_bus.clone(), 0x2A).release();
+    assert!(Rc::ptr_eq(&custom_bus.0, &returned.0));
     returned.done();
 }
