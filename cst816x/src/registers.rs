@@ -8,7 +8,6 @@
 //! performs transfers using an I2C reference supplied by the owning device.
 //! Gesture and finger-count decoding is fallible for undocumented codes.
 
-mod access;
 mod auto_reset;
 mod auto_sleep_disable;
 mod auto_sleep_time;
@@ -48,7 +47,6 @@ mod y_position;
 mod y_position_high;
 mod y_position_low;
 
-pub(crate) use access::Register;
 pub use auto_reset::AutoReset;
 pub use auto_sleep_disable::AutoSleepDisable;
 pub use auto_sleep_time::AutoSleepTime;
@@ -127,92 +125,5 @@ pub enum Address {
     AutoSleepDisable = 0xFE,
 }
 
-macro_rules! register_metadata {
-    ($($register:ident),+ $(,)?) => {
-        $(
-            impl $register {
-                /// Address of this byte register.
-                pub const ADDRESS: Address = Address::$register;
-            }
-
-            #[cfg(feature = "defmt")]
-            impl defmt::Format for $register {
-                fn format(&self, formatter: defmt::Formatter) {
-                    defmt::write!(
-                        formatter,
-                        "{}({=u8:#x})",
-                        stringify!($register),
-                        u8::from(*self)
-                    );
-                }
-            }
-        )+
-    };
-}
-
-register_metadata!(
-    GestureIdentifier,
-    FingerNumber,
-    XPositionHigh,
-    XPositionLow,
-    YPositionHigh,
-    YPositionLow,
-    ChipIdentifier,
-    ProjectIdentifier,
-    FirmwareVersion,
-    Bpc0High,
-    Bpc0Low,
-    Bpc1High,
-    Bpc1Low,
-    MotionMask,
-    InterruptPulseWidth,
-    NormalScanPeriod,
-    MotionSlidingAngle,
-    LowPowerScanRaw1High,
-    LowPowerScanRaw1Low,
-    LowPowerScanRaw2High,
-    LowPowerScanRaw2Low,
-    LowPowerAutoWakeTime,
-    LowPowerScanThreshold,
-    LowPowerScanWindow,
-    LowPowerScanFrequency,
-    LowPowerScanCurrent,
-    AutoSleepTime,
-    InterruptControl,
-    AutoReset,
-    LongPressTime,
-    IoControl,
-    AutoSleepDisable,
-);
-
-macro_rules! combined_register_metadata {
-    ($($register:ident => $address:ident),+ $(,)?) => {
-        $(
-            impl $register {
-                /// Address of the high byte of this combined register.
-                pub const ADDRESS: Address = Address::$address;
-            }
-
-            #[cfg(feature = "defmt")]
-            impl defmt::Format for $register {
-                fn format(&self, formatter: defmt::Formatter) {
-                    defmt::write!(
-                        formatter,
-                        "{}({=u16:#x})",
-                        stringify!($register),
-                        u16::from(*self)
-                    );
-                }
-            }
-        )+
-    };
-}
-
-combined_register_metadata!(
-    XPosition => XPositionHigh,
-    YPosition => YPositionHigh,
-    Bpc0 => Bpc0High,
-    Bpc1 => Bpc1High,
-    LowPowerScanRaw1 => LowPowerScanRaw1High,
-    LowPowerScanRaw2 => LowPowerScanRaw2High,
-);
+/// Stateless register access; the caller owns and lends the bus for each method.
+pub(crate) struct Register;
