@@ -2,7 +2,7 @@
 name = "cst816"
 version = "0.1.0"
 edition = "2024"
-description = "no_std typed CST816x"
+description = "no_std typed CST816S I2C touch controller driver"
 
 [dependencies]
 bilge = "0.5.0"

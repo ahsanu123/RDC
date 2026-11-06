@@ -33,15 +33,4 @@ impl Register {
         let low = comproc::read(i2c, device_address, Address::Bpc0Low)?;
         Ok(u16::from_be_bytes([high, low]).into())
     }
-
-    pub(crate) fn write_bpc0<I: I2c>(
-        &self,
-        i2c: &mut I,
-        device_address: u8,
-        value: Bpc0,
-    ) -> Result<(), Cst816sError<I::Error>> {
-        let [high, low] = u16::from(value).to_be_bytes();
-        comproc::write(i2c, device_address, Address::Bpc0High, high)?;
-        comproc::write(i2c, device_address, Address::Bpc0Low, low)
-    }
 }

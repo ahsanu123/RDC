@@ -40,6 +40,7 @@ mod motion_mask;
 mod motion_sliding_angle;
 mod normal_scan_period;
 mod project_identifier;
+mod touch;
 mod x_position;
 mod x_position_high;
 mod x_position_low;

@@ -30,8 +30,7 @@ impl Register {
         i2c: &mut I,
         device_address: u8,
     ) -> Result<YPosition, Cst816sError<I::Error>> {
-        let high = comproc::read(i2c, device_address, Address::YPositionHigh)?;
-        let low = comproc::read(i2c, device_address, Address::YPositionLow)?;
-        Ok(u16::from_be_bytes([high, low]).into())
+        let bytes = comproc::read_touch_window(i2c, device_address, YPosition::ADDRESS)?;
+        Ok(u16::from_be_bytes(bytes).into())
     }
 }
